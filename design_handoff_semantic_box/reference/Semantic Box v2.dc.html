@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Semantic Box — graph workspace v2" description="Layered graph explorer with class encoding, hop-decay focus, a per-path trace tree and A/B comparison." -->
+<helmet><script src="./ds-base.js"></script><link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"><style>html,body{margin:0;height:100%}#root{height:100%}a{color:var(--color-accent-700,#8c491a)}a:hover{color:var(--color-accent,#c67139)}</style></helmet>
+<div style="height:100vh;display:flex;flex-direction:column;background:var(--color-bg,#f5ead8);color:var(--color-text,#201e1d);font:400 14px/1.5 var(--font-body,system-ui);overflow:hidden">
+<div style="flex:none;height:52px;display:flex;align-items:center;gap:10px;padding:0 16px;background:var(--color-surface,#ebddc5);border-bottom:1px solid var(--color-divider,rgba(32,30,29,.16))">
+<span style="font:500 12px/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase">semantic box</span>
+<span style="font:400 11px/1 'JetBrains Mono',monospace;color:var(--color-neutral-600,#82796a)">{{ datasetLabel }}</span>
+<span style="flex:1"></span>
+<input placeholder="search &amp; jump" value="{{ query }}" onChange="{{ onQuery }}" style="width:170px;padding:7px 11px;border:1px solid var(--color-neutral-400,#c0b6a5);border-radius:999px;background:var(--color-neutral-100,#f9f4ed);font:400 11px/1 'JetBrains Mono',monospace;color:inherit;outline:none">
+<button onClick="{{ showLayers }}" style="position:relative;padding:8px 15px;border-radius:999px;border:1px solid var(--color-neutral-400,#c0b6a5);background:transparent;color:inherit;cursor:pointer;font:600 12px/1 var(--font-body,system-ui)" style-hover="border-color:var(--color-accent,#c67139)">
+<sc-if value="{{ isLayers }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;inset:-1px;border-radius:999px;border:1.5px solid var(--color-accent,#c67139);background:var(--color-accent-100,#fff2eb)"></span></sc-if>
+<span style="position:relative">Layers</span>
+</button>
+<button onClick="{{ showCompare }}" style="position:relative;padding:8px 15px;border-radius:999px;border:1px solid var(--color-neutral-400,#c0b6a5);background:transparent;color:inherit;cursor:pointer;font:600 12px/1 var(--font-body,system-ui)" style-hover="border-color:var(--color-accent,#c67139)">
+<sc-if value="{{ isCompare }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;inset:-1px;border-radius:999px;border:1.5px solid var(--color-accent,#c67139);background:var(--color-accent-100,#fff2eb)"></span></sc-if>
+<span style="position:relative">Compare</span>
+</button>
+</div>
+<div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(190px,250px) minmax(0,1fr) minmax(220px,300px);grid-template-rows:100%;align-items:stretch">
+<div style="display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--color-divider,rgba(32,30,29,.16))">
+<div style="display:flex;align-items:center;gap:8px;padding:12px 14px;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600,#82796a);border-bottom:1px solid var(--color-divider,rgba(32,30,29,.16))"><span>Layers</span><span style="flex:1"></span><span>{{ layerCount }}</span></div>
+<div style="flex:1;min-height:0;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:9px">
+<button style="flex:none;border:1px dashed var(--color-neutral-400,#c0b6a5);border-radius:var(--radius-sm,8px);background:transparent;padding:11px;white-space:nowrap;font:400 10px/1.3 'JetBrains Mono',monospace;color:var(--color-neutral-600,#82796a);cursor:pointer" style-hover="border-color:var(--color-accent,#c67139);color:var(--color-accent,#c67139)">+ build a layer over top</button>
+<sc-for list="{{ layers }}" as="layer" hint-placeholder-count="4">
+<div style="position:relative;display:flex;flex-direction:column;gap:8px;padding:10px 11px;border-radius:var(--radius-sm,8px);border:1px solid var(--color-neutral-400,#c0b6a5);background:var(--color-neutral-100,#f9f4ed)">
+<sc-if value="{{ layer.isActive }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;inset:-1px;border-radius:var(--radius-sm,8px);border:1.5px solid var(--color-accent,#c67139);background:var(--color-accent-100,#fff2eb)"></span></sc-if>
+<div style="position:relative;display:flex;align-items:center;gap:8px">
+<button onClick="{{ layer.toggle }}" style="position:relative;width:15px;height:15px;flex:none;padding:0;border-radius:999px;border:1px solid var(--color-neutral-500,#a19786);background:transparent;cursor:pointer">
+<sc-if value="{{ layer.isOn }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;inset:-1px;border-radius:999px;background:var(--color-accent,#c67139)"></span></sc-if>
+</button>
+<span style="flex:1;font:500 11px/1.2 'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ layer.name }}</span>
+<span style="font:400 9px/1 'JetBrains Mono',monospace;color:var(--color-neutral-600,#82796a)">{{ layer.counts }}</span>
+</div>
+<input type="range" min="0" max="100" value="{{ layer.opacity }}" onChange="{{ layer.setOpacity }}" title="layer opacity on canvas" style="position:relative;width:100%;accent-color:var(--color-accent,#c67139);height:14px;margin:0">
+<button onClick="{{ layer.activate }}" style="position:relative;align-self:flex-start;padding:5px 9px;border-radius:999px;border:1px solid var(--color-neutral-400,#c0b6a5);background:transparent;color:var(--color-neutral-700,#645c50);cursor:pointer;white-space:nowrap;font:400 9px/1.3 'JetBrains Mono',monospace">{{ layer.actLabel }}</button>
+</div>
+</sc-for>
+</div>
+<div style="flex:none;max-height:44%;overflow:auto;padding:12px 14px;border-top:1px solid var(--color-divider,rgba(32,30,29,.16))">
+<div style="display:flex;align-items:center;gap:8px;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600,#82796a);margin-bottom:10px"><span>Classes</span><span style="flex:1"></span><span>colour · shape</span></div>
+<div style="display:flex;flex-direction:column;gap:5px">
+<sc-for list="{{ classes }}" as="c" hint-placeholder-count="7">
+<button onClick="{{ c.toggle }}" style="display:flex;align-items:center;gap:9px;width:100%;padding:5px 7px;border:1px solid transparent;border-radius:999px;background:transparent;color:inherit;cursor:pointer;text-align:left" style-hover="border-color:var(--color-neutral-400,#c0b6a5)">
+<span style="flex:none;display:grid;place-items:center;width:16px;height:16px">
+<sc-if value="{{ c.isCircle }}" hint-placeholder-val="{{ true }}"><span style="width:13px;height:13px;border-radius:999px;background:{{ c.swatch }}"></span></sc-if>
+<sc-if value="{{ c.isBox }}" hint-placeholder-val="{{ false }}"><span style="width:13px;height:13px;border-radius:3px;background:{{ c.swatch }}"></span></sc-if>
+<sc-if value="{{ c.isDiamond }}" hint-placeholder-val="{{ false }}"><span style="width:11px;height:11px;border-radius:2px;transform:rotate(45deg);background:{{ c.swatch }}"></span></sc-if>
+</span>
+<span style="flex:1;font:400 11px/1.3 'JetBrains Mono',monospace;color:{{ c.ink }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.label }}</span>
+<span style="font:400 9px/1 'JetBrains Mono',monospace;color:var(--color-neutral-600,#82796a)">{{ c.count }}</span>
+</button>
+</sc-for>
+</div>
+<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--color-divider,rgba(32,30,29,.16));display:flex;flex-direction:column;gap:6px">
+<div style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600,#82796a)">Hop decay</div>
+<sc-for list="{{ hopLegend }}" as="h" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;gap:8px;font:400 10px/1.3 'JetBrains Mono',monospace;color:var(--color-neutral-700,#645c50)"><span style="width:26px;height:3px;border-radius:999px;background:var(--color-accent,#c67139);opacity:{{ h.alpha }}"></span><span>{{ h.label }}</span></div>
+</sc-for>
+</div>
+</div>
+</div>
+<div ref="{{ colRef }}" style="display:flex;flex-direction:column;min-width:0;overflow:hidden;border-right:1px solid var(--color-divider,rgba(32,30,29,.16))">
+<div style="flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--color-divider,rgba(32,30,29,.16))">
+<span style="font:500 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--color-neutral-600,#82796a)">Focus</span>
+<div style="display:flex;padding:2px;border:1px solid var(--color-neutral-400,#c0b6a5);border-radius:999px;background:var(--color-neutral-100,#f9f4ed)">
+<sc-for list="{{ modes }}" as="m" hint-placeholder-count="3">
+<button onClick="{{ m.select }}" style="position:relative;padding:5px 11px;border:0;border-radius:999px;background:transparent;color:inherit;cursor:pointer;font:500 10px/1 'JetBrains Mono',monospace">
+<sc-if value="{{ m.on }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;inset:0;border-radius:999px;background:var(--color-accent,#c67139)"></span></sc-if>
+<span style="position:relative;color:{{ m.ink }}">{{ m.label }}</span>
+</button>
+</sc-for>
+</div>
+<span style="font:500 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--color-neutral-600,#82796a)">Hops</span>
+<div style="display:flex;padding:2px;border:1px solid var(--color-neutral-400,#c0b6a5);border-radius:999px;background:var(--color-neutral-100,#f9f4ed)">
+<sc-for list="{{ hops }}" as="h" hint-placeholder-count="3">
+<button onClick="{{ h.select }}" style="position:relative;width:26px;padding:5px 0;border:0;border-radius:999px;background:transparent;color:inherit;cursor:pointer;font:500 10px/1 'JetBrains Mono',monospace">
+<sc-if value="{{ h.on }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;inset:0;border-radius:999px;background:var(--color-accent,#c67139)"></span></sc-if>
+<span style="position:relative;color:{{ h.ink }}">{{ h.label }}</span>
+</button>
+</sc-for>
+</div>
+<button onClick="{{ toggleDir }}" style="padding:6px 11px;border:1px solid var(--color-neutral-400,#c0b6a5);border-radius:999px;background:transparent;color:inherit;cursor:pointer;white-space:nowrap;font:400 10px/1 'JetBrains Mono',monospace" style-hover="border-color:var(--color-accent,#c67139)">{{ dirLabel }}</button>
+<button onClick="{{ toggleLabels }}" style="padding:6px 11px;border:1px solid var(--color-neutral-400,#c0b6a5);border-radius:999px;background:transparent;color:inherit;cursor:pointer;white-space:nowrap;font:400 10px/1 'JetBrains Mono',monospace" style-hover="border-color:var(--color-accent,#c67139)">{{ labelsLabel }}</button>
+<span style="flex:1"></span>
+<sc-if value="{{ isCompare }}" hint-placeholder-val="{{ false }}"><span style="padding:5px 9px;border:1px solid var(--color-accent,#c67139);border-radius:999px;white-space:nowrap;font:400 10px/1 'JetBrains Mono',monospace;color:var(--color-accent-700,#8c491a);background:var(--color-accent-100,#fff2eb)">⛓ synced pan · zoom · layer · selection</span></sc-if>
+<button onClick="{{ toggleTree }}" style="position:relative;padding:6px 11px;border:1px solid var(--color-neutral-400,#c0b6a5);border-radius:999px;background:transparent;color:inherit;cursor:pointer;white-space:nowrap;font:400 10px/1 'JetBrains Mono',monospace">
+<sc-if value="{{ treeOpen }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;inset:-1px;border-radius:999px;border:1.5px solid var(--color-accent,#c67139);background:var(--color-accent-100,#fff2eb)"></span></sc-if>
+<span style="position:relative">trace tree</span>
+</button>
+<sc-if value="{{ treeSquashed }}" hint-placeholder-val="{{ false }}"><span style="padding:5px 9px;border:1px dashed var(--color-neutral-400,#c0b6a5);border-radius:999px;white-space:nowrap;font:400 9px/1 'JetBrains Mono',monospace;color:var(--color-neutral-600,#82796a)">pane needs a wider window</span></sc-if>
+</div>
+<div style="flex:1;min-height:0;display:flex">
+<div ref="{{ wrapRef }}" style="flex:1;min-width:0;display:flex">{{ canvases }}</div>
+<sc-if value="{{ treeOpen }}" hint-placeholder-val="{{ true }}">
+<div style="flex:none;width:280px;display:flex;flex-direction:column;border-left:1px solid var(--color-divider,rgba(32,30,29,.16));background:var(--color-neutral-100,#f9f4ed)">
+<div style="flex:none;display:flex;align-items:center;gap:7px;padding:10px 12px;border-bottom:1px solid var(--color-divider,rgba(32,30,29,.16))">
+<span style="flex:1;min-width:0;font:500 10px/1.2 'JetBrains Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--color-neutral-600,#82796a);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">trace · {{ treeRoot }}</span>
+<button onClick="{{ expandAll }}" style="padding:4px 8px;border:1px solid var(--color-neutral-400,#c0b6a5);border-radius:999px;background:transparent;color:var(--color-neutral-700,#645c50);cursor:pointer;font:400 9px/1 'JetBrains Mono',monospace" style-hover="border-color:var(--color-accent,#c67139)">expand</button>
+<button onClick="{{ collapseAll }}" style="padding:4px 8px;border:1px solid var(--color-neutral-400,#c0b6a5);border-radius:999px;background:transparent;color:var(--color-neutral-700,#645c50);cursor:pointer;font:400 9px/1 'JetBrains Mono',monospace" style-hover="border-color:var(--color-accent,#c67139)">collapse</button>
+</div>
+<sc-if value="{{ treeCapped }}" hint-placeholder-val="{{ false }}">
+<div style="flex:none;margin:10px 12px 0;padding:8px 10px;border:1px dashed var(--color-accent-600,#b2622d);border-radius:var(--radius-sm,8px);font:400 9px/1.4 'JetBrains Mono',monospace;color:var(--color-accent-800,#643312);background:var(--color-accent-100,#fff2eb)">row cap reached — paths replicate shared nodes, deeper branches shown as “+n more”</div>
+</sc-if>
+<div style="flex:1;min-height:0;overflow:auto;padding:8px 8px 14px">
+<sc-for list="{{ treeRows }}" as="row" hint-placeholder-count="9">
+<div style="position:relative;display:flex;align-items:center;gap:7px;margin-left:{{ row.indent }};padding:4px 7px;border-radius:999px;cursor:pointer" onClick="{{ row.select }}" style-hover="background:var(--color-neutral-200,#efe8de)">
+<sc-if value="{{ row.isMatch }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;inset:0;border-radius:999px;border:1px solid var(--color-accent,#c67139);background:var(--color-accent-100,#fff2eb)"></span></sc-if>
+<button onClick="{{ row.toggle }}" style="position:relative;flex:none;width:13px;height:13px;padding:0;border:0;background:transparent;color:var(--color-neutral-600,#82796a);cursor:pointer;font:400 9px/1 'JetBrains Mono',monospace">{{ row.caret }}</button>
+<span style="position:relative;flex:none;display:grid;place-items:center;width:13px;height:13px">
+<sc-if value="{{ row.isCircle }}" hint-placeholder-val="{{ true }}"><span style="width:9px;height:9px;border-radius:999px;background:{{ row.color }}"></span></sc-if>
+<sc-if value="{{ row.isBox }}" hint-placeholder-val="{{ false }}"><span style="width:9px;height:9px;border-radius:2px;background:{{ row.color }}"></span></sc-if>
+<sc-if value="{{ row.isDiamond }}" hint-placeholder-val="{{ false }}"><span style="width:8px;height:8px;border-radius:1px;transform:rotate(45deg);background:{{ row.color }}"></span></sc-if>
+</span>
+<span style="position:relative;flex:1;min-width:0;font:400 10px/1.35 'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.id }}</span>
+<span style="position:relative;flex:none;font:400 9px/1 'JetBrains Mono',monospace;color:var(--color-neutral-600,#82796a);max-width:78px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ row.rel }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+</div>
+</div>
+<div style="display:flex;flex-direction:column;min-width:0">
+<div style="flex:none;display:flex;gap:6px;padding:11px 12px;border-bottom:1px solid var(--color-divider,rgba(32,30,29,.16))">
+<sc-for list="{{ panelTabs }}" as="tab" hint-placeholder-count="3">
+<button onClick="{{ tab.select }}" style="position:relative;padding:7px 11px;border-radius:6px;border:1px solid transparent;background:transparent;color:inherit;cursor:pointer;font:500 10px/1 'JetBrains Mono',monospace">
+<sc-if value="{{ tab.on }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;inset:-1px;border-radius:6px;border:1px solid var(--color-neutral-400,#c0b6a5);background:var(--color-surface,#ebddc5)"></span></sc-if>
+<span style="position:relative">{{ tab.label }}</span>
+</button>
+</sc-for>
+</div>
+<div style="flex:1;min-height:0;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:12px">
+<sc-if value="{{ showNode }}" hint-placeholder-val="{{ true }}">
+<div style="display:flex;flex-direction:column;gap:13px">
+<div style="display:flex;align-items:center;gap:9px">
+<span style="flex:none;display:grid;place-items:center;width:18px;height:18px">
+<sc-if value="{{ node.isCircle }}" hint-placeholder-val="{{ true }}"><span style="width:15px;height:15px;border-radius:999px;background:{{ node.color }}"></span></sc-if>
+<sc-if value="{{ node.isBox }}" hint-placeholder-val="{{ false }}"><span style="width:15px;height:15px;border-radius:3px;background:{{ node.color }}"></span></sc-if>
+<sc-if value="{{ node.isDiamond }}" hint-placeholder-val="{{ false }}"><span style="width:13px;height:13px;border-radius:2px;transform:rotate(45deg);background:{{ node.color }}"></span></sc-if>
+</span>
+<span style="flex:1;min-width:0;font:700 17px/1.15 var(--font-body,system-ui);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ node.id }}</span>
+<span style="padding:4px 9px;border:1px solid var(--color-accent,#c67139);border-radius:999px;background:var(--color-accent-100,#fff2eb);color:var(--color-accent-700,#8c491a);font:500 9px/1 'JetBrains Mono',monospace">{{ node.cls }}</span>
+</div>
+<div style="display:flex;flex-direction:column">
+<sc-for list="{{ node.metrics }}" as="m" hint-placeholder-count="5">
+<div style="display:flex;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid var(--color-divider,rgba(32,30,29,.16));font:400 11px/1.4 'JetBrains Mono',monospace"><span style="flex:1;color:var(--color-neutral-600,#82796a)">{{ m.label }}</span><span>{{ m.value }}</span></div>
+</sc-for>
+</div>
+<div>
+<div style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600,#82796a);margin-bottom:8px">Present in layers</div>
+<div style="display:flex;gap:6px">
+<sc-for list="{{ node.trace }}" as="step" hint-placeholder-count="4">
+<span style="display:inline-flex">
+<sc-if value="{{ step.present }}" hint-placeholder-val="{{ true }}"><span style="padding:6px 10px;border-radius:999px;border:1.5px solid var(--color-accent-600,#b2622d);background:var(--color-accent-200,#ffe1d0);color:var(--color-accent-800,#643312);font:600 10px/1 'JetBrains Mono',monospace">{{ step.label }}</span></sc-if>
+<sc-if value="{{ step.absent }}" hint-placeholder-val="{{ false }}"><span style="padding:6px 10px;border-radius:999px;border:1.5px dashed var(--color-neutral-400,#c0b6a5);background:transparent;color:var(--color-neutral-600,#82796a);font:400 10px/1 'JetBrains Mono',monospace;text-decoration:line-through">{{ step.label }}</span></sc-if>
+</span>
+</sc-for>
+</div>
+</div>
+<sc-for list="{{ node.groups }}" as="g" hint-placeholder-count="2">
+<div>
+<div style="display:flex;align-items:baseline;gap:8px;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600,#82796a);margin-bottom:8px"><span>{{ g.label }}</span><span style="flex:1"></span><span>{{ g.count }}</span></div>
+<div style="display:flex;flex-direction:column;gap:3px">
+<sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+<div onClick="{{ r.select }}" style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:6px;cursor:pointer" style-hover="background:var(--color-neutral-200,#efe8de)">
+<span style="flex:none;width:9px;height:9px;border-radius:999px;background:{{ r.color }}"></span>
+<span style="flex:1;min-width:0;font:400 10px/1.35 'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.id }}</span>
+<span style="flex:none;width:52px;height:4px;border-radius:999px;background:var(--color-neutral-300,#dcd3c4);overflow:hidden"><span style="display:block;height:100%;border-radius:999px;background:var(--color-accent,#c67139);width:{{ r.pct }}"></span></span>
+<span style="flex:none;width:30px;text-align:right;font:400 9px/1 'JetBrains Mono',monospace;color:var(--color-neutral-600,#82796a)">{{ r.w }}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+<div style="display:flex;flex-wrap:wrap;gap:6px">
+<button onClick="{{ focusNeighbourhood }}" style="padding:7px 11px;border:1px solid var(--color-neutral-400,#c0b6a5);border-radius:999px;background:transparent;white-space:nowrap;font:400 10px/1.3 'JetBrains Mono',monospace;color:inherit;cursor:pointer" style-hover="border-color:var(--color-accent,#c67139)">focus neighbourhood</button>
+<button onClick="{{ openInTree }}" style="padding:7px 11px;border:1px solid var(--color-neutral-400,#c0b6a5);border-radius:999px;background:transparent;white-space:nowrap;font:400 10px/1.3 'JetBrains Mono',monospace;color:inherit;cursor:pointer" style-hover="border-color:var(--color-accent,#c67139)">root the trace tree here</button>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ showLayerPanel }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="font:700 17px/1.15 var(--font-body,system-ui)">{{ activeLayer.name }}</div>
+<p style="margin:0;font:400 12px/1.55 var(--font-body,system-ui);color:var(--color-neutral-700,#645c50);text-wrap:pretty">{{ activeLayer.rule }}</p>
+<div style="font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600,#82796a)">Delta over previous layer</div>
+<div style="display:flex;flex-direction:column">
+<div style="display:flex;gap:10px;padding:0 0 6px;border-bottom:1px solid var(--color-neutral-400,#c0b6a5);font:500 9px/1 'JetBrains Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:var(--color-neutral-600,#82796a)"><span style="flex:1"></span><span style="width:56px;text-align:right">nodes</span><span style="width:56px;text-align:right">edges</span></div>
+<sc-for list="{{ activeLayer.delta }}" as="d" hint-placeholder-count="3">
+<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--color-divider,rgba(32,30,29,.16));font:400 11px/1.4 'JetBrains Mono',monospace"><span style="flex:1;color:var(--color-neutral-600,#82796a)">{{ d.label }}</span><span style="width:56px;text-align:right">{{ d.nodes }}</span><span style="width:56px;text-align:right">{{ d.edges }}</span></div>
+</sc-for>
+</div>
+</div>
+</sc-if>
+<sc-if value="{{ showAlignment }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;flex-direction:column;gap:12px">
+<div style="display:flex;align-items:baseline;gap:8px;font:500 10px/1 'JetBrains Mono',monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--color-neutral-600,#82796a)"><span>Alignment</span><span style="flex:1"></span><span>{{ matchLabel }}</span></div>
+<table style="width:100%;border-collapse:collapse;font:400 10px/1.4 'JetBrains Mono',monospace">
+<thead><tr><th style="width:6px;padding:0;border-bottom:1px solid var(--color-neutral-400,#c0b6a5)"></th><th style="text-align:left;padding:6px 4px;font-weight:500;color:var(--color-neutral-600,#82796a);border-bottom:1px solid var(--color-neutral-400,#c0b6a5)">A</th><th style="text-align:left;padding:6px 4px;font-weight:500;color:var(--color-neutral-600,#82796a);border-bottom:1px solid var(--color-neutral-400,#c0b6a5)">B</th><th style="text-align:right;padding:6px 4px;font-weight:500;color:var(--color-neutral-600,#82796a);border-bottom:1px solid var(--color-neutral-400,#c0b6a5)">reach A/B</th><th style="text-align:right;padding:6px 4px;font-weight:500;color:var(--color-neutral-600,#82796a);border-bottom:1px solid var(--color-neutral-400,#c0b6a5)">Δ</th></tr></thead>
+<tbody>
+<sc-for list="{{ alignment }}" as="row" hint-placeholder-count="5">
+<tr onClick="{{ row.select }}" style="cursor:pointer">
+<td style="width:6px;padding:0;border-bottom:1px solid var(--color-divider,rgba(32,30,29,.16))"><sc-if value="{{ row.selected }}" hint-placeholder-val="{{ false }}"><span style="display:block;width:3px;height:16px;border-radius:999px;background:var(--color-accent,#c67139)"></span></sc-if></td>
+<td style="padding:6px 4px;border-bottom:1px solid var(--color-divider,rgba(32,30,29,.16))">{{ row.a }}</td>
+<td style="padding:6px 4px;border-bottom:1px solid var(--color-divider,rgba(32,30,29,.16))">{{ row.b }}</td>
+<td style="padding:6px 4px;text-align:right;border-bottom:1px solid var(--color-divider,rgba(32,30,29,.16))">{{ row.deg }}</td>
+<td style="padding:6px 4px;text-align:right;border-bottom:1px solid var(--color-divider,rgba(32,30,29,.16))">{{ row.delta }}</td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+</sc-if>
+</div>
+</div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;datasetLabel&quot;:{&quot;editor&quot;:&quot;text&quot;,&quot;default&quot;:&quot;◦ clinical KG · run 12&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;nodeCount&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:120,&quot;min&quot;:40,&quot;max&quot;:260,&quot;step&quot;:10,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Graph density&quot;},&quot;density&quot;:{&quot;editor&quot;:&quot;range&quot;,&quot;default&quot;:1.6,&quot;min&quot;:0.4,&quot;max&quot;:3,&quot;step&quot;:0.2,&quot;unit&quot;:&quot;× edges/node&quot;,&quot;tsType&quot;:&quot;number&quot;,&quot;section&quot;:&quot;Graph density&quot;},&quot;decayCurve&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;gentle&quot;,&quot;standard&quot;,&quot;steep&quot;],&quot;default&quot;:&quot;standard&quot;,&quot;tsType&quot;:&quot;'gentle'|'standard'|'steep'&quot;,&quot;section&quot;:&quot;Focus&quot;},&quot;shapeEncoding&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Encoding&quot;},&quot;nodePalette&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;spectral&quot;,&quot;organic&quot;],&quot;default&quot;:&quot;spectral&quot;,&quot;tsType&quot;:&quot;'spectral'|'organic'&quot;,&quot;section&quot;:&quot;Encoding&quot;},&quot;canvasGround&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;white&quot;,&quot;warm&quot;],&quot;default&quot;:&quot;white&quot;,&quot;tsType&quot;:&quot;'white'|'warm'&quot;,&quot;section&quot;:&quot;Encoding&quot;},&quot;treePane&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Focus&quot;}}">
+const LAYERS = [
+  { name: 'L0 · source', rule: 'Imported source relations — the ground truth this stack is built over.', delta: [{ label: 'imported', nodes: '1 204', edges: '4 880' }] },
+  { name: 'L1 · co-occurrence', rule: 'Built over L0: pairs co-occurring at least 3 times become an undirected relation.', delta: [{ label: 'kept', nodes: '1 204', edges: '4 880' }, { label: 'added', nodes: '436', edges: '3 560' }, { label: 'dropped', nodes: '0', edges: '14' }] },
+  { name: 'L2 · inferred', rule: 'Built over L1: inference rules add directed relations where a path of length 2 is supported.', delta: [{ label: 'kept', nodes: '1 640', edges: '8 440' }, { label: 'added', nodes: '262', edges: '3 462' }, { label: 'dropped', nodes: '0', edges: '0' }] },
+  { name: 'L3 · clustered', rule: 'Built over L2: community detection groups nodes and promotes each cluster to a node.', delta: [{ label: 'kept', nodes: '1 902', edges: '11 902' }, { label: 'added', nodes: '282', edges: '1 118' }, { label: 'dropped', nodes: '0', edges: '212' }] }
+];
+
+// Two palettes. `warm` = Organic ramp steps (for the cream ground). `hex` = the data
+// palette: seven hues walked around the wheel at one perceptual lightness (~L* 56) and
+// one chroma, so no class outranks another by weight — only by hue. Both Organic accents
+// keep a seat (protein = terracotta, pathway = a sage pushed to full chroma) so the plate
+// still belongs to the room. Tuned against white, which is why the canvas gets white.
+const CLASSES = [
+  { key: 'case', label: 'case · source doc', shape: 'box', hex: '#3767cf', warm: '#3f4a2b' },
+  { key: 'cluster', label: 'cluster', shape: 'diamond', hex: '#8a4cc4', warm: '#643312' },
+  { key: 'gene', label: 'gene', shape: 'circle', hex: '#c33a63', warm: '#b2622d' },
+  { key: 'protein', label: 'protein', shape: 'circle', hex: '#c67139', warm: '#e69350' },
+  { key: 'pathway', label: 'pathway', shape: 'circle', hex: '#3f8c4a', warm: '#728157' },
+  { key: 'test', label: 'lab test', shape: 'circle', hex: '#0d8794', warm: '#a4b589' },
+  { key: 'inferred', label: 'inferred', shape: 'circle', hex: '#8a8177', warm: '#82796a' }
+];
+const CMAP = {}; CLASSES.forEach(c => CMAP[c.key] = c);
+
+const NAMES = {
+  gene: ['TP53', 'EGFR', 'MYC', 'KRAS', 'STAT3', 'AKT1', 'BRCA1', 'PTEN', 'JAK2', 'MTOR', 'VEGFA', 'CDK4', 'ERBB2', 'NRAS', 'SMAD4', 'RB1', 'FGFR1', 'MET', 'ALK', 'PIK3CA'],
+  protein: ['p53', 'EGF-R', 'c-Myc', 'K-Ras', 'pSTAT3', 'Akt', 'PI3K', 'mTORC1', 'VEGF', 'β-catenin'],
+  pathway: ['MAPK cascade', 'PI3K-Akt', 'cell cycle', 'apoptosis', 'JAK-STAT', 'angiogenesis', 'DNA repair'],
+  test: ['CRP', 'WBC count', 'HbA1c', 'troponin', 'creatinine', 'ALT'],
+  inferred: ['inf·assoc', 'inf·path', 'inf·co-reg', 'inf·target'],
+  cluster: ['cluster'],
+  case: ['case']
+};
+const RELS = { case: ['mentions'], cluster: ['contains', 'summarises'], other: ['treats', 'associated_with', 'regulates', 'part_of', 'co-occurs', 'inhibits'] };
+const DECAY = { gentle: [1, 1, 0.75, 0.5], standard: [1, 1, 0.55, 0.28], steep: [1, 0.85, 0.35, 0.12] };
+const MAX_TREE_DEPTH = 4, MAX_TREE_ROWS = 160;
+
+class Component extends DCLogic {
+  state = {
+    mode: 'layers', panel: 'node', active: 3, query: '', selected: null, treeRoot: null,
+    focus: 'highlight', hop: 2, dir: 'down', labels: true, tree: null,
+    vis: [true, true, true, true], op: [30, 55, 80, 100],
+    cls: CLASSES.reduce((a, c) => (a[c.key] = true, a), {}),
+    open: {}, baseDepth: 2
+  };
+
+  // colW is the grid column (independent of the tree pane); the graph width is DERIVED from it,
+  // never measured, so showing/hiding the tree can never feed back into a resize loop.
+  measure = () => {
+    const col = this.col, wrap = this.wrap;
+    if (!col || !wrap) return;
+    const cw = col.clientWidth, h = wrap.clientHeight;
+    if (cw !== this.state.colW || h !== this.state.paneH) this.setState({ colW: cw, paneH: h });
+  };
+  setCol = el => {
+    if (this.col === el) return;
+    if (this.ro && this.col) this.ro.unobserve(this.col);
+    this.col = el;
+    if (this.ro && el) this.ro.observe(el);
+    this.measure();
+  };
+  setWrap = el => {
+    if (this.wrap === el) return;
+    if (this.ro && this.wrap) this.ro.unobserve(this.wrap);
+    this.wrap = el;
+    if (this.ro && el) this.ro.observe(el);
+    this.measure();
+  };
+
+  componentDidMount() {
+    if (window.ResizeObserver) {
+      this.ro = new ResizeObserver(this.measure);
+      if (this.col) this.ro.observe(this.col);
+      if (this.wrap) this.ro.observe(this.wrap);
+    }
+    window.addEventListener('resize', this.measure);
+    this.measure();
+    this.autoSelect();
+  }
+  componentDidUpdate() { this.autoSelect(); }
+  componentWillUnmount() { if (this.ro) this.ro.disconnect(); window.removeEventListener('resize', this.measure); }
+
+  autoSelect() {
+    if (this.autoSelected || this.state.selected) return;
+    const v = this.view(this.state.mode === 'compare' ? 4 : 1);
+    if (!v.nodes.length) return;
+    const first = v.nodes.find(n => n.cls === 'case') || v.nodes[0];
+    this.autoSelected = true;
+    this.setState({ selected: first.id, treeRoot: first.id });
+  }
+
+  model(seed) {
+    const N = Math.round(this.props.nodeCount ?? 120), density = this.props.density ?? 1.6;
+    const key = seed + '/' + N + '/' + density;
+    this._m = this._m || {};
+    if (this._m[key]) return this._m[key];
+    let s = seed * 7919 + 13; const r = () => (s = s * 16807 % 2147483647) / 2147483647;
+    const nCase = Math.max(3, Math.round(N * 0.05)), nCluster = Math.max(3, Math.round(N * 0.07));
+    const used = {}, nodes = [];
+    const pool = ['gene', 'protein', 'pathway', 'test', 'inferred'];
+    for (let i = 0; i < N; i++) {
+      const cls = i < nCase ? 'case' : i < nCase + nCluster ? 'cluster' : pool[(r() * pool.length) | 0];
+      let base = cls === 'case' ? 'PMC' + (1234500 + i) + '·0' + (1 + (i % 3))
+        : cls === 'cluster' ? 'cluster ' + CLASSES[2 + (i % 5)].key + ':' + (i % 9)
+        : NAMES[cls][(r() * NAMES[cls].length) | 0];
+      used[base] = (used[base] || 0) + 1;
+      const id = used[base] > 1 ? base + '·' + used[base] : base;
+      const layer = cls === 'cluster' ? 3 : cls === 'inferred' ? 2 : i % 6 === 0 ? 1 : 0;
+      nodes.push({ id, cls, x: r(), y: r(), layer });
+    }
+    const idx = {}; nodes.forEach((n, i) => idx[n.id] = i);
+    const order = nodes.map((n, i) => i).sort((a, b) => (nodes[a].x + nodes[a].y) - (nodes[b].x + nodes[b].y));
+    const edges = [], seen = {};
+    const push = (a, b, rel) => {
+      if (a === b) return;
+      const k = a + '>' + b; if (seen[k]) return; seen[k] = 1;
+      edges.push({ s: nodes[a].id, t: nodes[b].id, rel, w: Math.round(r() * 95) / 100, layer: Math.max(nodes[a].layer, nodes[b].layer) });
+    };
+    for (let c = 0; c < nCase; c++) for (let j = 0, k = 4 + ((r() * 6) | 0); j < k; j++) {
+      const t = order[(r() * N) | 0]; if (nodes[t].cls !== 'case') push(c, t, 'mentions');
+    }
+    for (let c = nCase; c < nCase + nCluster; c++) for (let j = 0, k = 3 + ((r() * 5) | 0); j < k; j++) {
+      const t = order[(r() * N) | 0]; if (nodes[t].cls !== 'case') push(c, t, 'contains');
+    }
+    const M = Math.round(N * density);
+    for (let e = 0; e < M; e++) {
+      const pi = (r() * N) | 0, a = order[pi];
+      const off = (1 + ((r() * 6) | 0)) * (r() > 0.5 ? 1 : -1);
+      const b = order[Math.max(0, Math.min(N - 1, pi + off))];
+      if (nodes[a].cls === 'case' || nodes[b].cls === 'case') continue;
+      push(a, b, RELS.other[(r() * RELS.other.length) | 0]);
+    }
+    const m = { nodes, edges, idx, nCase };
+    this._m[key] = m;
+    return m;
+  }
+
+  view(seed) {
+    const st = this.state, m = this.model(seed);
+    const on = n => this.state.cls[n.cls] && n.layer <= st.active && st.vis[n.layer];
+    const nodes = m.nodes.filter(on);
+    const live = {}; nodes.forEach(n => live[n.id] = n);
+    const edges = m.edges.filter(e => live[e.s] && live[e.t] && e.layer <= st.active);
+    const out = {}, inn = {}, deg = {};
+    edges.forEach(e => {
+      (out[e.s] = out[e.s] || []).push(e); (inn[e.t] = inn[e.t] || []).push(e);
+      deg[e.s] = (deg[e.s] || 0) + 1; deg[e.t] = (deg[e.t] || 0) + 1;
+    });
+    Object.keys(out).forEach(k => out[k].sort((a, b) => b.w - a.w));
+    const sel = st.selected && live[st.selected] ? st.selected : null;
+    const dist = {};
+    if (sel) {
+      dist[sel] = 0;
+      let q = [sel];
+      while (q.length) {
+        const cur = q.shift(), d = dist[cur];
+        if (d >= st.hop) continue;
+        const nb = (out[cur] || []).map(e => e.t).concat(st.dir === 'both' ? (inn[cur] || []).map(e => e.s) : []);
+        nb.forEach(id => { if (dist[id] === undefined) { dist[id] = d + 1; q.push(id); } });
+      }
+    }
+    return { m, nodes, live, edges, out, inn, deg, sel, dist };
+  }
+
+  tree(v, rootId) {
+    const st = this.state, rows = [];
+    let capped = false;
+    const walk = (id, depth, path, key, rel) => {
+      if (rows.length >= MAX_TREE_ROWS) { capped = true; return; }
+      const kids = (v.out[id] || []).filter(e => !path[e.t]);
+      const canExpand = depth < MAX_TREE_DEPTH && kids.length > 0;
+      const openState = st.open[key];
+      const isOpen = canExpand && (openState === undefined ? depth < st.baseDepth : openState);
+      rows.push({ key, depth, id, rel, canExpand, isOpen, more: kids.length });
+      if (!isOpen) return;
+      kids.forEach(e => {
+        const p = Object.assign({}, path); p[e.t] = 1;
+        walk(e.t, depth + 1, p, key + '/' + e.t, e.rel);
+      });
+    };
+    if (rootId && v.live[rootId]) walk(rootId, 0, { [rootId]: 1 }, rootId, null);
+    return { rows, capped };
+  }
+
+  // one accessor for every coloured mark, so palette and ground never drift apart
+  pal(c) { return (this.props.nodePalette ?? 'spectral') === 'organic' ? c.warm : c.hex; }
+  onWhite() { return (this.props.canvasGround ?? 'white') === 'white' && (this.props.nodePalette ?? 'spectral') !== 'organic'; }
+
+  canvas(v, seed, tag, divider) {
+    const st = this.state, alpha = DECAY[this.props.decayCurve ?? 'standard'];
+    const white = this.onWhite();
+    const ground = white ? '#ffffff' : 'var(--color-bg,#f5ead8)';
+    const gridInk = white ? 'rgba(32,30,29,.10)' : 'var(--color-neutral-300,#dcd3c4)';
+    const nodeHalo = white ? '#ffffff' : 'rgba(249,244,237,.85)';
+    const restInk = white ? 'rgba(32,30,29,.34)' : 'rgba(32,30,29,.5)';
+    // structure reads from weight + hop-decay alpha, never from a categorical hue
+    const edgeInk = white ? 'rgba(26,28,38,.62)' : 'rgba(32,30,29,.62)';
+    const shapeOn = this.props.shapeEncoding !== false;
+    const compare = st.mode === 'compare';
+    const avail = (st.colW || 900) - (this._treeW || 0) - 4;
+    const W = Math.max(240, Math.round(avail / (compare ? 2 : 1)));
+    const H = Math.max(200, st.paneH || 480);
+    const X = n => 24 + n.x * (W - 48), Y = n => 24 + n.y * (H - 48);
+    const inSub = id => v.sel && v.dist[id] !== undefined;
+    const filtering = st.focus === 'filter' && v.sel;
+    const dim = st.focus === 'none' || !v.sel ? 1 : 0.1;
+    const kids = [];
+    v.edges.forEach((e, i) => {
+      const a = v.live[e.s], b = v.live[e.t];
+      const both = inSub(e.s) && inSub(e.t);
+      if (filtering && !both) return;
+      const hop = both ? Math.max(v.dist[e.s], v.dist[e.t]) : 0;
+      const op = (st.op[Math.max(a.layer, b.layer)] ?? 100) / 100;
+      kids.push(React.createElement('line', {
+        key: 'e' + i, x1: X(a), y1: Y(a), x2: X(b), y2: Y(b),
+        stroke: both ? edgeInk : restInk,
+        strokeWidth: both ? (0.7 + e.w * 2.6) * (hop >= 2 ? 0.6 : 1) : 0.8,
+        strokeOpacity: (both ? alpha[Math.min(hop, 3)] : dim) * op
+      }));
+    });
+    v.nodes.forEach((n, i) => {
+      const sub = inSub(n.id);
+      if (filtering && !sub) return;
+      const hop = sub ? v.dist[n.id] : 0;
+      const isSel = n.id === v.sel;
+      const r = Math.min(9, 2.6 + (v.deg[n.id] || 0) * 0.5) + (isSel ? 2 : 0);
+      const c = CMAP[n.cls], px = X(n), py = Y(n);
+      const shape = shapeOn ? c.shape : 'circle';
+      const op = (sub ? alpha[Math.min(hop, 3)] : dim) * ((st.op[n.layer] ?? 100) / 100);
+      const common = { key: 'n' + i, fill: this.pal(c), fillOpacity: op, stroke: isSel ? 'var(--color-text,#201e1d)' : nodeHalo, strokeWidth: isSel ? 2 : 0.8, strokeOpacity: op, style: { cursor: 'pointer' }, onClick: () => this.select(n.id) };
+      if (shape === 'box') kids.push(React.createElement('rect', Object.assign({ x: px - r, y: py - r, width: r * 2, height: r * 2, rx: 2 }, common)));
+      else if (shape === 'diamond') kids.push(React.createElement('polygon', Object.assign({ points: [px, py - r * 1.25, px + r * 1.25, py, px, py + r * 1.25, px - r * 1.25, py].join(' ') }, common)));
+      else kids.push(React.createElement('circle', Object.assign({ cx: px, cy: py, r: r }, common)));
+      if (sub && hop >= 2) kids.push(React.createElement('circle', { key: 'r' + i, cx: px, cy: py, r: r + 3.5, fill: 'none', stroke: this.pal(c), strokeWidth: 0.7, strokeOpacity: op * 0.9 }));
+      const showLabel = st.labels && (isSel || (sub && hop <= 1) || n.cls === 'case');
+      // JetBrains Mono advance ≈ 0.6em — measure the label, then flip only if the flip fits too
+      const tw = String(n.id).length * (isSel ? 6.6 : 5.4);
+      const flip = px + r + 4 + tw > W - 6 && px - r - 4 - tw > 6;
+      if (showLabel) kids.push(React.createElement('text', {
+        key: 't' + i, x: flip ? Math.max(px - r - 4, 6 + tw) : Math.min(px + r + 4, W - 6 - tw), y: py + 3.5, textAnchor: flip ? 'end' : 'start', fontSize: isSel ? 11 : 9,
+        fontFamily: "'JetBrains Mono',monospace", fill: 'var(--color-text,#201e1d)', fillOpacity: Math.max(op, 0.55), style: { pointerEvents: 'none' }
+      }, n.id));
+    });
+    return React.createElement('div', { key: 'g' + seed, style: { flex: 1, minWidth: 0, position: 'relative', overflow: 'hidden', borderRight: divider ? '1px solid var(--color-divider,rgba(32,30,29,.16))' : 0, background: ground, backgroundImage: 'radial-gradient(' + gridInk + ' 1px, transparent 1px)', backgroundSize: '18px 18px', boxShadow: white ? 'inset 0 0 0 1px rgba(32,30,29,.10)' : 'none' } },
+      React.createElement('svg', { viewBox: '0 0 ' + W + ' ' + H, preserveAspectRatio: 'xMidYMid slice', style: { position: 'absolute', inset: 0, width: '100%', height: '100%' }, onClick: e => { if (e.target.tagName === 'svg') this.select(null); } }, kids),
+      React.createElement('span', { style: { position: 'absolute', left: 12, top: 12, maxWidth: 'calc(100% - 24px)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '6px 10px', borderRadius: 999, border: '1px solid var(--color-divider,rgba(32,30,29,.16))', background: 'var(--color-neutral-100,#f9f4ed)', font: "400 10px/1 'JetBrains Mono',monospace", color: 'var(--color-neutral-700,#645c50)' } }, tag),
+      React.createElement('div', { style: { position: 'absolute', right: 12, bottom: 12, width: 104, height: 68, borderRadius: 6, border: '1px solid var(--color-neutral-400,#c0b6a5)', background: 'var(--color-neutral-100,#f9f4ed)' } },
+        React.createElement('div', { style: { position: 'absolute', left: '22%', top: '20%', width: '44%', height: '52%', border: '1px solid var(--color-accent,#c67139)', borderRadius: 3 } })));
+  }
+
+  select(id) {
+    this.setState(s => {
+      const root = id && (s.treeRoot === null || s.treeRoot === s.selected) ? id : s.treeRoot;
+      return { selected: id, treeRoot: id ? root : s.treeRoot, panel: id ? (s.panel === 'align' ? 'align' : 'node') : s.panel };
+    });
+  }
+
+  renderVals() {
+    const st = this.state, compare = st.mode === 'compare';
+    const set = (k, val) => this.setState({ [k]: val });
+    const A = this.view(compare ? 4 : 1);
+    const B = compare ? this.view(9) : null;
+    const treeWanted = st.tree === null ? this.props.treePane !== false : st.tree;
+    const treeShown = treeWanted && (st.colW === undefined || st.colW >= 640);
+    this._treeW = treeShown ? 280 : 0;
+    const rootId = st.treeRoot && A.live[st.treeRoot] ? st.treeRoot : st.selected;
+    const T = this.tree(A, rootId);
+    const alpha = DECAY[this.props.decayCurve ?? 'standard'];
+    const sel = A.sel ? A.live[A.sel] : null;
+    const selCls = sel ? CMAP[sel.cls] : CLASSES[0];
+    const shapeOn = this.props.shapeEncoding !== false;
+    const shapeOf = c => (shapeOn ? c.shape : 'circle');
+    const counts = {}; A.nodes.forEach(n => counts[n.cls] = (counts[n.cls] || 0) + 1);
+    const hopSet = d => Object.keys(A.dist).filter(id => A.dist[id] === d);
+    const rowsFor = list => list.slice(0, 6).map(e => {
+      const id = e.id, w = e.w;
+      return { id, w: w.toFixed(2), pct: Math.round(w * 100) + '%', color: this.pal(CMAP[A.live[id] ? A.live[id].cls : 'inferred']), select: () => this.select(id) };
+    });
+    const groups = [];
+    if (sel) {
+      groups.push({ label: 'outgoing · hop 1', count: (A.out[sel.id] || []).length, rows: rowsFor((A.out[sel.id] || []).map(e => ({ id: e.t, w: e.w }))) });
+      if (st.dir === 'both') groups.push({ label: 'incoming · hop 1', count: (A.inn[sel.id] || []).length, rows: rowsFor((A.inn[sel.id] || []).map(e => ({ id: e.s, w: e.w }))) });
+      for (let h = 2; h <= st.hop; h++) {
+        const ids = hopSet(h);
+        if (ids.length) groups.push({ label: 'reachable · hop ' + h, count: ids.length, rows: rowsFor(ids.map(id => ({ id, w: alpha[Math.min(h, 3)] }))) });
+      }
+    }
+
+    return {
+      datasetLabel: this.props.datasetLabel ?? '◦ clinical KG · run 12',
+      query: st.query, onQuery: e => set('query', e.target.value),
+      wrapRef: this.setWrap,
+      colRef: this.setCol,
+      isCompare: compare, isLayers: !compare,
+      matchLabel: A.nodes.length + ' / ' + (B ? B.nodes.length : A.nodes.length) + ' matched',
+      layerCount: LAYERS.length,
+      showLayers: () => this.setState({ mode: 'layers', panel: st.panel === 'align' ? 'node' : st.panel }),
+      showCompare: () => this.setState({ mode: 'compare', panel: 'align' }),
+
+      layers: LAYERS.map((l, i) => ({ l, i })).reverse().map(({ l, i }) => ({
+        name: l.name,
+        counts: st.vis[i] ? A.m.nodes.filter(n => n.layer === i).length + ' n' : 'hidden',
+        opacity: st.op[i], isActive: i === st.active, isOn: st.vis[i],
+        actLabel: i === st.active ? 'active layer' : 'make active',
+        toggle: () => this.setState(s => { const v = s.vis.slice(); v[i] = !v[i]; return { vis: v }; }),
+        setOpacity: e => { const val = +e.target.value; this.setState(s => { const o = s.op.slice(); o[i] = val; return { op: o }; }); },
+        activate: () => set('active', i)
+      })),
+
+      classes: CLASSES.map(c => ({
+        label: c.label, count: counts[c.key] || 0, swatch: st.cls[c.key] ? this.pal(c) : 'var(--color-neutral-300,#dcd3c4)',
+        ink: st.cls[c.key] ? 'inherit' : 'var(--color-neutral-500,#a19786)',
+        isCircle: shapeOf(c) === 'circle', isBox: shapeOf(c) === 'box', isDiamond: shapeOf(c) === 'diamond',
+        toggle: () => this.setState(s => ({ cls: Object.assign({}, s.cls, { [c.key]: !s.cls[c.key] }) }))
+      })),
+      hopLegend: [0, 1, 2, 3].map(h => ({ alpha: String(alpha[h]), label: h === 0 ? 'selected node' : 'hop ' + h + ' · ' + Math.round(alpha[h] * 100) + '%' })),
+
+      modes: [['none', 'none'], ['highlight', 'highlight'], ['filter', 'filter']].map(([k, label]) => ({
+        label, on: st.focus === k, ink: st.focus === k ? 'var(--color-neutral-100,#f9f4ed)' : 'var(--color-neutral-700,#645c50)', select: () => set('focus', k)
+      })),
+      hops: [1, 2, 3].map(h => ({
+        label: String(h), on: st.hop === h, ink: st.hop === h ? 'var(--color-neutral-100,#f9f4ed)' : 'var(--color-neutral-700,#645c50)', select: () => set('hop', h)
+      })),
+      dirLabel: st.dir === 'both' ? '⇄ both directions' : '→ downstream only',
+      toggleDir: () => set('dir', st.dir === 'both' ? 'down' : 'both'),
+      labelsLabel: st.labels ? 'labels on' : 'labels off',
+      toggleLabels: () => set('labels', !st.labels),
+      treeOpen: treeShown,
+      treeSquashed: treeWanted && !treeShown,
+      toggleTree: () => this.setState(s => ({ tree: !(s.tree === null ? this.props.treePane !== false : s.tree) })),
+
+      canvases: compare
+        ? [this.canvas(A, 4, 'A · ' + LAYERS[st.active].name + ' · ' + (A.sel || 'no selection'), true), this.canvas(B, 9, 'B · ' + LAYERS[st.active].name + ' · ' + (B.sel || 'unmatched'), false)]
+        : this.canvas(A, 1, LAYERS[st.active].name + ' · ' + A.nodes.length + ' n · ' + A.edges.length + ' e · focus ' + st.focus + ' · ' + st.hop + ' hop', false),
+
+      treeRoot: rootId || 'click a node',
+      treeCapped: T.capped,
+      treeRows: T.rows.map(r => {
+        const c = CMAP[A.live[r.id] ? A.live[r.id].cls : 'inferred'];
+        return {
+          id: r.id, rel: r.rel || 'root', indent: (r.depth * 13) + 'px',
+          caret: r.canExpand ? (r.isOpen ? '▾' : '▸') : '·',
+          color: this.pal(c), isCircle: shapeOf(c) === 'circle', isBox: shapeOf(c) === 'box', isDiamond: shapeOf(c) === 'diamond',
+          isMatch: r.id === A.sel,
+          select: () => this.select(r.id),
+          toggle: e => { if (e && e.stopPropagation) e.stopPropagation(); if (!r.canExpand) return; this.setState(s => ({ open: Object.assign({}, s.open, { [r.key]: !r.isOpen }) })); }
+        };
+      }),
+      expandAll: () => this.setState({ open: {}, baseDepth: MAX_TREE_DEPTH }),
+      collapseAll: () => this.setState({ open: {}, baseDepth: 1 }),
+
+      panelTabs: (compare ? [['align', 'Alignment'], ['node', 'Node'], ['layer', 'Layer']] : [['node', 'Node'], ['layer', 'Layer'], ['align', 'Alignment']]).map(([k, label]) => ({
+        label, on: st.panel === k, select: () => set('panel', k)
+      })),
+      showNode: st.panel === 'node', showLayerPanel: st.panel === 'layer', showAlignment: st.panel === 'align',
+
+      node: {
+        id: sel ? sel.id : 'nothing selected',
+        cls: selCls.key, color: this.pal(selCls),
+        isCircle: shapeOf(selCls) === 'circle', isBox: shapeOf(selCls) === 'box', isDiamond: shapeOf(selCls) === 'diamond',
+        metrics: sel ? [
+          { label: 'class · shape', value: selCls.key + ' · ' + shapeOf(selCls) },
+          { label: 'out / in degree', value: (A.out[sel.id] || []).length + ' / ' + (A.inn[sel.id] || []).length },
+          { label: 'reached · ' + st.hop + ' hop', value: Object.keys(A.dist).length - 1 + ' nodes' },
+          { label: 'trace direction', value: st.dir === 'both' ? 'both' : 'downstream' },
+          { label: 'tree rows', value: T.rows.length + (T.capped ? ' (capped)' : '') }
+        ] : [{ label: 'hint', value: 'click a node on the canvas' }],
+        trace: LAYERS.map((l, i) => ({ label: 'L' + i, present: sel ? sel.layer <= i : false, absent: sel ? sel.layer > i : true })),
+        groups
+      },
+      focusNeighbourhood: () => set('focus', 'highlight'),
+      openInTree: () => this.setState({ treeRoot: st.selected, tree: true, open: {}, baseDepth: 2 }),
+      activeLayer: LAYERS[st.active],
+      alignment: (A.nodes.slice(0, 12).filter(n => n.cls !== 'case').slice(0, 6)).map(n => {
+        const inB = B && B.live[n.id];
+        return {
+          a: n.id, b: inB ? n.id : '—',
+          deg: (A.deg[n.id] || 0) + '/' + (inB ? (B.deg[n.id] || 0) : '—'),
+          delta: inB ? ((B.deg[n.id] || 0) - (A.deg[n.id] || 0) > 0 ? '+' : '') + ((B.deg[n.id] || 0) - (A.deg[n.id] || 0)) : 'A only',
+          selected: n.id === A.sel,
+          select: () => this.select(n.id)
+        };
+      })
+    };
+  }
+}
+</script>
+</body>
+</html>
