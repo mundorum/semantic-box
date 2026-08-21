@@ -116,6 +116,15 @@
           <button class="toolbar-pill" @click="toggleDir">[[ dir === 'both' ? '⇄ both directions' : '→ downstream only' ]]</button>
           <button class="toolbar-pill" @click="toggleLabels">[[ labels ? 'labels on' : 'labels off' ]]</button>
 
+          <span class="toolbar__label">Compare by</span>
+          <select class="nsm-select" :value="nsmMetric" @change="setNsmMetric($event.target.value)">
+            <option v-for="m in nsmMetricOptions" :key="m.key" :value="m.key">[[ m.label ]]</option>
+          </select>
+          <div class="seg" v-if="nsmMetric !== 'none'">
+            <button v-for="s in ['specific','differential','common']" :key="s" class="seg-opt"
+                    :class="{ 'seg-opt--selected': nsmState === s }" @click="setNsmState(s)">[[ s ]]</button>
+          </div>
+
           <span class="toolbar__spacer"></span>
 
           <span class="compare-badge" v-if="isCompare">⛓ synced pan · zoom · layer · selection</span>
@@ -148,6 +157,8 @@
                       style="cursor:pointer" @click="select(n.id)" />
                 <circle v-if="n.hopRing" :cx="n.cx" :cy="n.cy" :r="n.ringR" fill="none"
                       :stroke="n.ringColor" stroke-width="0.7" :stroke-opacity="n.ringOpacity" style="pointer-events:none" />
+                <circle v-if="n.nsmRing" :cx="n.cx" :cy="n.cy" :r="n.ringNsmR" fill="none"
+                      :stroke="n.ringNsmColor" :stroke-width="n.ringNsmWidth" :stroke-opacity="n.ringNsmOpacity" style="pointer-events:none" />
                 <text v-if="n.showLabel" :x="n.labelX" :y="n.labelY" :text-anchor="n.labelAnchor" :font-size="n.labelSize"
                       font-family="'JetBrains Mono',monospace" fill="#201e1d" :fill-opacity="n.labelOpacity" style="pointer-events:none">[[ n.id ]]</text>
               </template>
@@ -179,6 +190,8 @@
                         style="cursor:pointer" @click="select(n.id)" />
                   <circle v-if="n.hopRing" :cx="n.cx" :cy="n.cy" :r="n.ringR" fill="none"
                         :stroke="n.ringColor" stroke-width="0.7" :stroke-opacity="n.ringOpacity" style="pointer-events:none" />
+                  <circle v-if="n.nsmRing" :cx="n.cx" :cy="n.cy" :r="n.ringNsmR" fill="none"
+                        :stroke="n.ringNsmColor" :stroke-width="n.ringNsmWidth" :stroke-opacity="n.ringNsmOpacity" style="pointer-events:none" />
                   <text v-if="n.showLabel" :x="n.labelX" :y="n.labelY" :text-anchor="n.labelAnchor" :font-size="n.labelSize"
                         font-family="'JetBrains Mono',monospace" fill="#201e1d" :fill-opacity="n.labelOpacity" style="pointer-events:none">[[ n.id ]]</text>
                 </template>
@@ -206,6 +219,8 @@
                         style="cursor:pointer" @click="select(n.id)" />
                   <circle v-if="n.hopRing" :cx="n.cx" :cy="n.cy" :r="n.ringR" fill="none"
                         :stroke="n.ringColor" stroke-width="0.7" :stroke-opacity="n.ringOpacity" style="pointer-events:none" />
+                  <circle v-if="n.nsmRing" :cx="n.cx" :cy="n.cy" :r="n.ringNsmR" fill="none"
+                        :stroke="n.ringNsmColor" :stroke-width="n.ringNsmWidth" :stroke-opacity="n.ringNsmOpacity" style="pointer-events:none" />
                   <text v-if="n.showLabel" :x="n.labelX" :y="n.labelY" :text-anchor="n.labelAnchor" :font-size="n.labelSize"
                         font-family="'JetBrains Mono',monospace" fill="#201e1d" :fill-opacity="n.labelOpacity" style="pointer-events:none">[[ n.id ]]</text>
                 </template>
@@ -264,6 +279,13 @@
 
             <div class="metric-list">
               <div class="metric-row" v-for="m in nodeMetrics" :key="m.label">
+                <span class="metric-row__label">[[ m.label ]]</span><span>[[ m.value ]]</span>
+              </div>
+            </div>
+
+            <div v-if="nodeRawMetrics.length" class="metric-list">
+              <div class="section-label">Metrics</div>
+              <div class="metric-row" v-for="m in nodeRawMetrics" :key="m.label">
                 <span class="metric-row__label">[[ m.label ]]</span><span>[[ m.value ]]</span>
               </div>
             </div>

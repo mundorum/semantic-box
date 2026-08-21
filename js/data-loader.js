@@ -13,6 +13,37 @@ async function fetchCSV(path) {
   return parseCSV(await res.text());
 }
 
+// The *_descending / *_ascending columns hold Node-Specificity-by-Metric
+// (NSM) results as Python-repr'd list literals: `[]` (this node isn't a
+// high-p node for this metric — the tripartite metrics are exclusively
+// miR-centric, so Messenger RNA/Pathway rows are always `[]`), `[['specific']]`,
+// or `[['common'|'differential', otherDatasetKey, jaccard]]`. Single quotes
+// make it Python, not JSON, but the values themselves never contain quotes
+// or commas, so a blind '->" swap is safe here.
+const NSM_COLUMNS = [
+  'betweenness_centrality_descending',
+  'closeness_centrality_descending',
+  'degree_centrality_descending',
+  'redundancy_coefficient_descending',
+  'redundancy_coefficient_ascending',
+  'pathway_reach_descending',
+  'functional_impact_descending',
+];
+
+function parseNsmCell(raw) {
+  const s = (raw || '').trim();
+  if (!s || s === '[]') return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(s.replace(/'/g, '"'));
+  } catch (e) {
+    return null;
+  }
+  if (!Array.isArray(parsed) || !parsed.length) return null;
+  const inner = parsed[0];
+  return { state: inner[0], other: inner[1] || null, jaccard: inner[2] !== undefined ? inner[2] : null };
+}
+
 async function loadDataset(prefix) {
   const [nodeRows, edgeRows] = await Promise.all([
     fetchCSV('examples/' + prefix + '_nodes.csv'),
@@ -21,7 +52,23 @@ async function loadDataset(prefix) {
 
   const nodes = nodeRows
     .filter(r => CLASS_MAP[r.type])
-    .map(r => ({ id: r.id, label: r.label || r.id, cls: r.type, layer: 0 }));
+    .map(r => {
+      const nsm = {};
+      NSM_COLUMNS.forEach(col => { nsm[col] = parseNsmCell(r[col]); });
+      return {
+        id: r.id, label: r.label || r.id, cls: r.type, layer: 0, nsm,
+        metrics: {
+          moduleId: r.module_id, componentId: r.connected_component_id,
+          inLargestComponent: r.is_in_largest_component === '1',
+          betweenness: parseFloat(r.betweenness_centrality),
+          closeness: parseFloat(r.closeness_centrality),
+          degree: parseFloat(r.degree_centrality),
+          redundancy: parseFloat(r.redundancy_coefficient),
+          pathwayReach: r.pathway_reach === '' ? null : parseFloat(r.pathway_reach),
+          functionalImpact: r.functional_impact === '' ? null : parseFloat(r.functional_impact),
+        },
+      };
+    });
   const nodeIds = new Set(nodes.map(n => n.id));
 
   const edges = [];

@@ -56,6 +56,13 @@ createApp({
       treeRoot: null,
       open: {},          // per-path-key expand/collapse overrides
       baseDepth: 2,
+
+      // Node Specificity by Metric (NSM) cross-graph comparison — 'none' turns
+      // it off entirely. Works in either mode (both datasets are always
+      // loaded), but the echo half of it only has somewhere to render once
+      // compare mode's second canvas exists.
+      nsmMetric: 'none',
+      nsmState: 'specific', // 'specific' | 'differential' | 'common'
     };
   },
 
@@ -126,9 +133,15 @@ createApp({
       });
     },
 
+    nsmSuffix() {
+      if (this.nsmMetric === 'none') return '';
+      const m = NSM_METRICS.find(m => m.key === this.nsmMetric);
+      return ' · nsm ' + (m ? m.label : this.nsmMetric) + ' ' + this.nsmState;
+    },
+
     cornerTag() {
       const v = this.view;
-      return this.layersMeta[this.active].name + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop';
+      return this.layersMeta[this.active].name + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop' + this.nsmSuffix;
     },
 
     layersRender() {
@@ -204,7 +217,21 @@ createApp({
     cornerTagB() {
       const v = this.viewB;
       if (!v) return '';
-      return 'L0 · ' + this.otherDatasetKey + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop';
+      return 'L0 · ' + this.otherDatasetKey + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop' + this.nsmSuffix;
+    },
+
+    nsmMetricOptions() {
+      return [{ key: 'none', label: 'compare: off' }].concat(NSM_METRICS);
+    },
+
+    // { A: {nodeId: {state,strong,color}}, B: {...} } — see computeNsmMarks.
+    nsmMarks() {
+      if (this.nsmMetric === 'none') return { A: {}, B: {} };
+      return computeNsmMarks(
+        this.nsmMetric, this.nsmState,
+        this.model.nodes, this.modelB.nodes,
+        this.otherDatasetKey, this.activeDataset
+      );
     },
 
     panelTabs() {
@@ -242,6 +269,24 @@ createApp({
         present: sel ? sel.layer <= i : false,
         absent: sel ? sel.layer > i : true,
       }));
+    },
+
+    // Raw per-node analysis metrics from the CSVs (module/component + the
+    // centrality/redundancy/pathway metrics NSM ranks are derived from).
+    nodeRawMetrics() {
+      const sel = this.selNode;
+      if (!sel || !sel.metrics) return [];
+      const m = sel.metrics;
+      const fmt = v => (v === null || v === undefined || Number.isNaN(v)) ? '—' : v.toFixed(3);
+      return [
+        { label: 'module · component', value: m.moduleId + ' · ' + m.componentId + (m.inLargestComponent ? ' (largest)' : '') },
+        { label: 'betweenness centrality', value: fmt(m.betweenness) },
+        { label: 'closeness centrality', value: fmt(m.closeness) },
+        { label: 'degree centrality', value: fmt(m.degree) },
+        { label: 'redundancy coefficient', value: fmt(m.redundancy) },
+        { label: 'pathway reach', value: fmt(m.pathwayReach) },
+        { label: 'functional impact', value: fmt(m.functionalImpact) },
+      ];
     },
 
     nodeGroups() {
@@ -298,9 +343,9 @@ createApp({
     },
 
     edgesRender() { return this.computeEdgesFor(this.view); },
-    nodesRender() { return this.computeNodesFor(this.view); },
+    nodesRender() { return this.computeNodesFor(this.view, this.nsmMarks.A); },
     edgesRenderB() { return this.viewB ? this.computeEdgesFor(this.viewB) : []; },
-    nodesRenderB() { return this.viewB ? this.computeNodesFor(this.viewB) : []; },
+    nodesRenderB() { return this.viewB ? this.computeNodesFor(this.viewB, this.nsmMarks.B) : []; },
   },
 
   methods: {
@@ -336,11 +381,16 @@ createApp({
       return out;
     },
 
-    computeNodesFor(v) {
+    // marks: this side's {nodeId: {state,strong,color}} from nsmMarks —
+    // strong = this side's own specific/differential/common classification;
+    // non-strong = an echo of the OTHER side's classification, in the same
+    // colour, so the same node can be spotted on both canvases.
+    computeNodesFor(v, marks) {
       const W = this.canvasWidth, H = this.canvasHeight;
       const alpha = DECAY[this.decayCurve];
       const filtering = this.focus === 'filter' && v.sel;
       const dim = this.focus === 'none' || !v.sel ? 1 : 0.1;
+      const nsmActive = this.nsmMetric !== 'none';
       const out = [];
       v.nodes.forEach(n => {
         const sub = v.sel && v.dist[n.id] !== undefined;
@@ -353,7 +403,13 @@ createApp({
         const layerOp = (this.op[n.layer] ?? 100) / 100;
         const op = (sub ? alpha[Math.min(hop, 3)] : dim) * layerOp;
 
-        const showLabel = this.labels && (isSel || (sub && hop <= 1));
+        // NSM mode replaces the usual "selected + hop<=1" label rule with
+        // "only marked nodes" — otherwise a few hundred faded genes would
+        // still all carry labels and bury the ones that actually matter here.
+        const mark = marks[n.id];
+        const showLabel = nsmActive
+          ? (this.labels && !!mark)
+          : (this.labels && (isSel || (sub && hop <= 1)));
         const tw = String(n.id).length * (isSel ? 6.6 : 5.4);
         const flip = px + r + 4 + tw > W - 6 && px - r - 4 - tw > 6;
         const labelX = flip ? Math.max(px - r - 4, 6 + tw) : Math.min(px + r + 4, W - 6 - tw);
@@ -365,6 +421,10 @@ createApp({
           stroke: isSel ? CANVAS_INK.selectStroke : CANVAS_INK.nodeHalo,
           strokeWidth: isSel ? 2 : 0.8, strokeOpacity: op,
           hopRing: !!(sub && hop >= 2), ringR: r + 3.5, ringColor: c.color, ringOpacity: op * 0.9,
+          nsmRing: !!mark, ringNsmR: r + (mark && mark.strong ? 5 : 7),
+          ringNsmColor: mark ? mark.color : null,
+          ringNsmWidth: mark && mark.strong ? 1.8 : 1,
+          ringNsmOpacity: mark ? (mark.strong ? 0.95 : 0.45) : 0,
           showLabel, labelX, labelY: py + 3.5, labelAnchor: flip ? 'end' : 'start',
           labelSize: isSel ? 11 : 9, labelOpacity: Math.max(op, 0.55),
         });
@@ -437,6 +497,9 @@ createApp({
     toggleDir() { this.dir = this.dir === 'both' ? 'down' : 'both'; },
     toggleLabels() { this.labels = !this.labels; },
     toggleTree() { this.treeWanted = !this.treeWanted; },
+
+    setNsmMetric(key) { this.nsmMetric = key; },
+    setNsmState(state) { this.nsmState = state; },
 
     toggleLayerVis(i) { const v = this.vis.slice(); v[i] = !v[i]; this.vis = v; },
     setLayerOpacity(i, val) { const o = this.op.slice(); o[i] = +val; this.op = o; },

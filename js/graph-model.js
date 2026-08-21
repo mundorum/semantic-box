@@ -25,6 +25,54 @@ const CANVAS_INK = {
   labelInk: '#201e1d',
 };
 
+// NSM comparison: identity colour per canvas side (A = left, B = right;
+// position-based, not tied to a dataset name). Reuses two hues from the
+// design handoff's full seven-hue spectral set that our tripartite subset
+// doesn't otherwise use, so this stays inside the sanctioned canvas palette
+// rather than inventing a new ad hoc colour.
+const NSM_IDENTITY = { A: '#8a4cc4', B: '#0d8794' }; // violet / teal
+
+const NSM_METRICS = [
+  { key: 'betweenness_centrality_descending', label: 'betweenness (desc)' },
+  { key: 'closeness_centrality_descending', label: 'closeness (desc)' },
+  { key: 'degree_centrality_descending', label: 'degree (desc)' },
+  { key: 'redundancy_coefficient_descending', label: 'redundancy (desc)' },
+  { key: 'redundancy_coefficient_ascending', label: 'redundancy (asc)' },
+  { key: 'pathway_reach_descending', label: 'pathway reach (desc)' },
+  { key: 'functional_impact_descending', label: 'functional impact (desc)' },
+];
+
+// Builds the per-side highlight marks for one NSM metric+state: an "own"
+// (strong) mark on the side whose classification actually says
+// specific/common/differential, and — for common/differential only — a
+// fainter "echo" mark on the other side in the SAME colour, so the same
+// node X can be spotted on both canvases. Nodes not present in a side (no
+// matching id) simply get no mark there.
+function computeNsmMarks(metricKey, state, nodesA, nodesB, otherKeyA, otherKeyB) {
+  const marksA = {}, marksB = {};
+  const ownPass = (nodes, marks, color) => {
+    nodes.forEach(n => {
+      const info = n.nsm[metricKey];
+      if (!info || info.state !== state) return;
+      marks[n.id] = { state: info.state, strong: true, color };
+    });
+  };
+  const echoPass = (nodes, otherKey, marksOther, color) => {
+    if (state === 'specific') return; // nothing to echo — specific means absent elsewhere
+    nodes.forEach(n => {
+      const info = n.nsm[metricKey];
+      if (!info || info.state !== state) return;
+      if (info.other !== otherKey) return;
+      if (!marksOther[n.id]) marksOther[n.id] = { state: info.state, strong: false, color };
+    });
+  };
+  ownPass(nodesA, marksA, NSM_IDENTITY.A);
+  ownPass(nodesB, marksB, NSM_IDENTITY.B);
+  echoPass(nodesA, otherKeyA, marksB, NSM_IDENTITY.A);
+  echoPass(nodesB, otherKeyB, marksA, NSM_IDENTITY.B);
+  return { A: marksA, B: marksB };
+}
+
 // Derives the filtered view (class + layer ceiling + layer visibility),
 // adjacency, degree and BFS hop-distance (from the selected node) for one
 // graph model under the current UI state.
