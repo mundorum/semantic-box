@@ -1,0 +1,395 @@
+const { createApp } = Vue;
+
+createApp({
+  delimiters: ['[[', ']]'],
+
+  data() {
+    return {
+      mode: 'layers',           // 'layers' | 'compare'
+      query: '',                 // search box — not yet wired (design intent only)
+      datasetLabel: '◦ luminal-a · run 1',
+
+      // Measured column box. The graph width is DERIVED from colW, never measured
+      // directly — see README "Critical layout constraint".
+      colW: undefined,
+      paneH: undefined,
+      treeWanted: true,
+
+      // Stage-2 mock graph — replaced by real CSV data + a layered layout once
+      // every panel is wired (see js/graph-model.js).
+      model: generateMockGraph(1),
+      modelB: generateMockGraph(2), // stands in for a loaded "graph B" — only used by the Alignment tab in compare mode
+      decayCurve: 'standard',
+
+      panel: 'node', // 'node' | 'layer' | 'align'
+
+      // Stage-3 mock build-stack — see LAYERS in graph-model.js for why this
+      // doesn't reflect real construction layers yet.
+      active: 3,
+      vis: [true, true, true, true],
+      op: [30, 55, 80, 100],
+      cls: { MicroRNA: true, 'Messenger RNA': true, Pathway: true },
+
+      selected: null,
+      focus: 'highlight',       // 'none' | 'highlight' | 'filter'
+      hop: 2,                    // 1 | 2 | 3
+      dir: 'down',                // 'down' | 'both'
+      labels: true,
+
+      // Trace tree — a DFS path tree pinned to the selected node unless the
+      // user has pinned it elsewhere (see select() for the pinning rule).
+      treeRoot: null,
+      open: {},          // per-path-key expand/collapse overrides
+      baseDepth: 2,
+    };
+  },
+
+  computed: {
+    isLayers() { return this.mode === 'layers'; },
+    isCompare() { return this.mode === 'compare'; },
+
+    // Tree pane hides purely on column width — it must never depend on a
+    // measured graph width, or hiding the tree could feed back into a resize loop.
+    treeShown() {
+      return this.treeWanted && (this.colW === undefined || this.colW >= 640);
+    },
+
+    graphWidth() {
+      const colW = this.colW || 0;
+      return Math.max(60, Math.round(colW - (this.treeShown ? 280 : 0) - 4));
+    },
+    canvasHeight() {
+      return Math.max(200, this.paneH || 480);
+    },
+
+    view() {
+      return computeView(this.model, {
+        selected: this.selected, hop: this.hop, dir: this.dir,
+        active: this.active, vis: this.vis, cls: this.cls,
+      });
+    },
+
+    cornerTag() {
+      const v = this.view;
+      return LAYERS[this.active].name + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop';
+    },
+
+    layersRender() {
+      return LAYERS.map((l, i) => ({ l, i })).reverse().map(({ l, i }) => ({
+        i, name: l.name,
+        counts: this.vis[i] ? this.model.nodes.filter(n => n.layer === i).length + ' n' : 'hidden',
+        opacity: this.op[i],
+        isActive: i === this.active,
+        isOn: this.vis[i],
+        actLabel: i === this.active ? 'active layer' : 'make active',
+      }));
+    },
+
+    classesRender() {
+      const v = this.view;
+      const counts = {};
+      v.nodes.forEach(n => { counts[n.cls] = (counts[n.cls] || 0) + 1; });
+      return CLASSES.map(c => ({
+        key: c.key, label: c.label, shape: c.shape,
+        count: counts[c.key] || 0,
+        on: this.cls[c.key],
+        swatch: this.cls[c.key] ? c.color : '#dcd3c4',
+      }));
+    },
+
+    hopLegendRender() {
+      const alpha = DECAY[this.decayCurve];
+      return [0, 1, 2, 3].map(h => ({
+        alpha: alpha[h],
+        label: h === 0 ? 'selected node' : 'hop ' + h + ' · ' + Math.round(alpha[h] * 100) + '%',
+      }));
+    },
+
+    // Falls back to the current selection when the pinned root has scrolled
+    // out of view (filtered out) or nothing has been pinned yet.
+    effectiveTreeRoot() {
+      return this.treeRoot && this.view.live[this.treeRoot] ? this.treeRoot : this.selected;
+    },
+
+    treeData() {
+      return computeTree(this.view, this.effectiveTreeRoot, { open: this.open, baseDepth: this.baseDepth });
+    },
+
+    treeRowsRender() {
+      const v = this.view;
+      return this.treeData.rows.map(row => {
+        const n = v.live[row.id];
+        const c = CLASS_MAP[n ? n.cls : 'Messenger RNA'];
+        return {
+          key: row.key, id: row.id,
+          rel: row.rel || 'root',
+          indent: (row.depth * 13) + 'px',
+          caret: row.canExpand ? (row.isOpen ? '▾' : '▸') : '·',
+          color: c.color, shape: c.shape,
+          isMatch: row.id === v.sel,
+          canExpand: row.canExpand, isOpen: row.isOpen,
+        };
+      });
+    },
+
+    // Graph B only exists to give the Alignment tab something to compare
+    // against in compare mode — no second canvas yet (real dual-graph
+    // loading is a later step).
+    viewB() {
+      if (!this.isCompare) return null;
+      return computeView(this.modelB, {
+        selected: null, hop: this.hop, dir: this.dir,
+        active: this.active, vis: this.vis, cls: this.cls,
+      });
+    },
+
+    panelTabs() {
+      const order = this.isCompare
+        ? [['align', 'Alignment'], ['node', 'Node'], ['layer', 'Layer']]
+        : [['node', 'Node'], ['layer', 'Layer'], ['align', 'Alignment']];
+      return order.map(([key, label]) => ({ key, label }));
+    },
+
+    selNode() {
+      const v = this.view;
+      return v.sel ? v.live[v.sel] : null;
+    },
+    selClass() {
+      return this.selNode ? CLASS_MAP[this.selNode.cls] : CLASSES[0];
+    },
+
+    nodeMetrics() {
+      const v = this.view, sel = this.selNode;
+      if (!sel) return [{ label: 'hint', value: 'click a node on the canvas' }];
+      const c = CLASS_MAP[sel.cls];
+      return [
+        { label: 'class · shape', value: sel.cls + ' · ' + c.shape },
+        { label: 'out / in degree', value: (v.out[sel.id] || []).length + ' / ' + (v.inn[sel.id] || []).length },
+        { label: 'reached · ' + this.hop + ' hop', value: (Object.keys(v.dist).length - 1) + ' nodes' },
+        { label: 'trace direction', value: this.dir === 'both' ? 'both' : 'downstream' },
+        { label: 'tree rows', value: this.treeData.rows.length + (this.treeData.capped ? ' (capped)' : '') },
+      ];
+    },
+
+    nodeTraceChips() {
+      const sel = this.selNode;
+      return LAYERS.map((l, i) => ({
+        label: 'L' + i,
+        present: sel ? sel.layer <= i : false,
+        absent: sel ? sel.layer > i : true,
+      }));
+    },
+
+    nodeGroups() {
+      const v = this.view, sel = this.selNode;
+      if (!sel) return [];
+      const alpha = DECAY[this.decayCurve];
+      const rowsFor = list => list.slice(0, 6).map(({ id, w }) => ({
+        id, w: w.toFixed(2), pct: Math.round(w * 100) + '%',
+        color: CLASS_MAP[v.live[id] ? v.live[id].cls : 'Messenger RNA'].color,
+      }));
+      const groups = [];
+      groups.push({
+        label: 'outgoing · hop 1', count: (v.out[sel.id] || []).length,
+        rows: rowsFor((v.out[sel.id] || []).map(e => ({ id: e.t, w: e.w }))),
+      });
+      if (this.dir === 'both') {
+        groups.push({
+          label: 'incoming · hop 1', count: (v.inn[sel.id] || []).length,
+          rows: rowsFor((v.inn[sel.id] || []).map(e => ({ id: e.s, w: e.w }))),
+        });
+      }
+      for (let h = 2; h <= this.hop; h++) {
+        const ids = Object.keys(v.dist).filter(id => v.dist[id] === h);
+        if (ids.length) groups.push({ label: 'reachable · hop ' + h, count: ids.length, rows: rowsFor(ids.map(id => ({ id, w: alpha[Math.min(h, 3)] }))) });
+      }
+      return groups;
+    },
+
+    activeLayer() { return LAYERS[this.active]; },
+
+    matchLabel() {
+      const A = this.view, B = this.viewB;
+      return A.nodes.length + ' / ' + (B ? B.nodes.length : A.nodes.length) + ' matched';
+    },
+
+    // Picks a spread across classes (rather than array order, which would be
+    // all-MicroRNA-first) so the demo table actually shows variety.
+    alignmentRows() {
+      const A = this.view, B = this.viewB;
+      const byClass = {};
+      A.nodes.forEach(n => { (byClass[n.cls] = byClass[n.cls] || []).push(n); });
+      const picks = [];
+      CLASSES.forEach(c => { (byClass[c.key] || []).slice(0, 2).forEach(n => picks.push(n)); });
+      return picks.slice(0, 6).map(n => {
+        const inB = B && B.live[n.id];
+        const dA = A.deg[n.id] || 0, dB = inB ? (B.deg[n.id] || 0) : null;
+        return {
+          a: n.id, b: inB ? n.id : '—',
+          deg: dA + '/' + (inB ? dB : '—'),
+          delta: inB ? ((dB - dA > 0 ? '+' : '') + (dB - dA)) : 'A only',
+          selected: n.id === A.sel,
+        };
+      });
+    },
+
+    edgesRender() {
+      const v = this.view, W = this.graphWidth, H = this.canvasHeight;
+      const alpha = DECAY[this.decayCurve];
+      const filtering = this.focus === 'filter' && v.sel;
+      const dim = this.focus === 'none' || !v.sel ? 1 : 0.1;
+      const X = n => 24 + n.x * (W - 48);
+      const Y = n => 24 + n.y * (H - 48);
+      const out = [];
+      v.edges.forEach(e => {
+        const a = v.live[e.s], b = v.live[e.t];
+        if (!a || !b) return;
+        const both = v.sel && v.dist[e.s] !== undefined && v.dist[e.t] !== undefined;
+        if (filtering && !both) return;
+        const hop = both ? Math.max(v.dist[e.s], v.dist[e.t]) : 0;
+        const layerOp = (this.op[Math.max(a.layer, b.layer)] ?? 100) / 100;
+        out.push({
+          key: e.s + '>' + e.t,
+          x1: X(a), y1: Y(a), x2: X(b), y2: Y(b),
+          stroke: both ? CANVAS_INK.edge : CANVAS_INK.edgeRest,
+          strokeWidth: both ? (0.7 + e.w * 2.6) * (hop >= 2 ? 0.6 : 1) : 0.8,
+          strokeOpacity: (both ? alpha[Math.min(hop, 3)] : dim) * layerOp,
+        });
+      });
+      return out;
+    },
+
+    nodesRender() {
+      const v = this.view, W = this.graphWidth, H = this.canvasHeight;
+      const alpha = DECAY[this.decayCurve];
+      const filtering = this.focus === 'filter' && v.sel;
+      const dim = this.focus === 'none' || !v.sel ? 1 : 0.1;
+      const out = [];
+      v.nodes.forEach(n => {
+        const sub = v.sel && v.dist[n.id] !== undefined;
+        if (filtering && !sub) return;
+        const hop = sub ? v.dist[n.id] : 0;
+        const isSel = n.id === v.sel;
+        const r = Math.min(9, 2.6 + (v.deg[n.id] || 0) * 0.5) + (isSel ? 2 : 0);
+        const c = CLASS_MAP[n.cls];
+        const px = 24 + n.x * (W - 48), py = 24 + n.y * (H - 48);
+        const layerOp = (this.op[n.layer] ?? 100) / 100;
+        const op = (sub ? alpha[Math.min(hop, 3)] : dim) * layerOp;
+
+        const showLabel = this.labels && (isSel || (sub && hop <= 1));
+        const tw = String(n.id).length * (isSel ? 6.6 : 5.4);
+        const flip = px + r + 4 + tw > W - 6 && px - r - 4 - tw > 6;
+        const labelX = flip ? Math.max(px - r - 4, 6 + tw) : Math.min(px + r + 4, W - 6 - tw);
+
+        out.push({
+          id: n.id, cls: n.cls, shape: c.shape,
+          cx: px, cy: py, r,
+          fill: c.color, fillOpacity: op,
+          stroke: isSel ? CANVAS_INK.selectStroke : CANVAS_INK.nodeHalo,
+          strokeWidth: isSel ? 2 : 0.8, strokeOpacity: op,
+          hopRing: !!(sub && hop >= 2), ringR: r + 3.5, ringColor: c.color, ringOpacity: op * 0.9,
+          showLabel, labelX, labelY: py + 3.5, labelAnchor: flip ? 'end' : 'start',
+          labelSize: isSel ? 11 : 9, labelOpacity: Math.max(op, 0.55),
+        });
+      });
+      return out;
+    },
+  },
+
+  methods: {
+    showLayers() { this.mode = 'layers'; if (this.panel === 'align') this.panel = 'node'; },
+    showCompare() { this.mode = 'compare'; this.panel = 'align'; },
+
+    // Identity-guarded ref callbacks: re-renders must not thrash the observer.
+    setCenterCol(el) {
+      if (this._centerCol === el) return;
+      if (this._ro && this._centerCol) this._ro.unobserve(this._centerCol);
+      this._centerCol = el;
+      if (this._ro && el) this._ro.observe(el);
+      this.measure();
+    },
+    setCanvasWrap(el) {
+      if (this._canvasWrap === el) return;
+      if (this._ro && this._canvasWrap) this._ro.unobserve(this._canvasWrap);
+      this._canvasWrap = el;
+      if (this._ro && el) this._ro.observe(el);
+      this.measure();
+    },
+
+    measure() {
+      const col = this._centerCol, wrap = this._canvasWrap;
+      if (col) {
+        const cw = col.clientWidth;
+        if (cw !== this.colW) this.colW = cw;
+      }
+      if (wrap) {
+        const h = wrap.clientHeight;
+        if (h !== this.paneH) this.paneH = h;
+      }
+    },
+
+    // If the tree root was unset or was tracking the previous selection, it
+    // follows the new selection; otherwise a manually-pinned root stays put.
+    // Clearing the selection (id === null) never touches the root.
+    select(id) {
+      const root = id && (this.treeRoot === null || this.treeRoot === this.selected) ? id : this.treeRoot;
+      this.selected = id;
+      if (id) {
+        this.treeRoot = root;
+        if (this.panel !== 'align') this.panel = 'node';
+      }
+    },
+    svgClick(e) { if (e.target.tagName === 'svg') this.select(null); },
+
+    setFocus(mode) { this.focus = mode; },
+    setHop(n) { this.hop = n; },
+    toggleDir() { this.dir = this.dir === 'both' ? 'down' : 'both'; },
+    toggleLabels() { this.labels = !this.labels; },
+    toggleTree() { this.treeWanted = !this.treeWanted; },
+
+    toggleLayerVis(i) { const v = this.vis.slice(); v[i] = !v[i]; this.vis = v; },
+    setLayerOpacity(i, val) { const o = this.op.slice(); o[i] = +val; this.op = o; },
+    activateLayer(i) { this.active = i; },
+    toggleClass(key) { this.cls = Object.assign({}, this.cls, { [key]: !this.cls[key] }); },
+
+    toggleTreeRow(row) {
+      if (!row.canExpand) return;
+      this.open = Object.assign({}, this.open, { [row.key]: !row.isOpen });
+    },
+    expandAllRows() { this.open = {}; this.baseDepth = MAX_TREE_DEPTH; },
+    collapseAllRows() { this.open = {}; this.baseDepth = 1; },
+
+    focusNeighbourhood() { this.focus = 'highlight'; },
+    openInTree() {
+      this.treeRoot = this.selected;
+      this.treeWanted = true;
+      this.open = {};
+      this.baseDepth = 2;
+    },
+
+    diamondPoints(n) {
+      return [
+        n.cx + ',' + (n.cy - n.r * 1.25),
+        (n.cx + n.r * 1.25) + ',' + n.cy,
+        n.cx + ',' + (n.cy + n.r * 1.25),
+        (n.cx - n.r * 1.25) + ',' + n.cy,
+      ].join(' ');
+    },
+  },
+
+  mounted() {
+    if (window.ResizeObserver) {
+      this._ro = new ResizeObserver(() => this.measure());
+      if (this._centerCol) this._ro.observe(this._centerCol);
+      if (this._canvasWrap) this._ro.observe(this._canvasWrap);
+    }
+    this._onResize = () => this.measure();
+    window.addEventListener('resize', this._onResize);
+    this.measure();
+  },
+
+  beforeUnmount() {
+    if (this._ro) this._ro.disconnect();
+    window.removeEventListener('resize', this._onResize);
+  },
+}).mount('#app');

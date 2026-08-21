@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>semantic box</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="app">
+  <div class="shell">
+
+    <!-- top bar · 52px -->
+    <div class="topbar">
+      <span class="topbar__wordmark">semantic box</span>
+      <span class="topbar__dataset">[[ datasetLabel ]]</span>
+      <span class="topbar__spacer"></span>
+      <input class="search-input" placeholder="search &amp; jump" v-model="query">
+      <button class="pill" @click="showLayers">
+        <span class="pill__active-overlay" v-if="isLayers"></span>
+        <span class="pill__label">Layers</span>
+      </button>
+      <button class="pill" @click="showCompare">
+        <span class="pill__active-overlay" v-if="isCompare"></span>
+        <span class="pill__label">Compare</span>
+      </button>
+    </div>
+
+    <!-- three-column grid -->
+    <div class="grid">
+
+      <!-- left rail -->
+      <div class="col col--rail">
+        <div class="rail-header">
+          <span>Layers</span>
+          <span class="rail-header__spacer"></span>
+          <span>[[ layersRender.length ]]</span>
+        </div>
+
+        <div class="layer-list">
+          <button class="build-layer-btn">+ build a layer over top</button>
+          <div class="layer-card" v-for="l in layersRender" :key="l.i">
+            <span class="layer-card__active-overlay" v-if="l.isActive"></span>
+            <div class="layer-card__row">
+              <button class="vis-toggle" @click="toggleLayerVis(l.i)">
+                <span class="vis-toggle__fill" v-if="l.isOn"></span>
+              </button>
+              <span class="layer-name">[[ l.name ]]</span>
+              <span class="layer-count">[[ l.counts ]]</span>
+            </div>
+            <input type="range" min="0" max="100" :value="l.opacity" class="opacity-slider"
+                   title="layer opacity on canvas" @input="setLayerOpacity(l.i, $event.target.value)">
+            <button class="activate-btn" @click="activateLayer(l.i)">[[ l.actLabel ]]</button>
+          </div>
+        </div>
+
+        <div class="rail-bottom">
+          <div class="legend-header">
+            <span>Classes</span><span class="rail-header__spacer"></span><span>colour · shape</span>
+          </div>
+          <div class="class-rows">
+            <button class="class-row" v-for="c in classesRender" :key="c.key" @click="toggleClass(c.key)">
+              <span class="class-glyph">
+                <span v-if="c.shape === 'circle'" class="glyph-circle" :style="{ background: c.swatch }"></span>
+                <span v-else-if="c.shape === 'box'" class="glyph-box" :style="{ background: c.swatch }"></span>
+                <span v-else class="glyph-diamond" :style="{ background: c.swatch }"></span>
+              </span>
+              <span class="class-label" :class="{ 'class-label--off': !c.on }">[[ c.label ]]</span>
+              <span class="class-count">[[ c.count ]]</span>
+            </button>
+          </div>
+
+          <div class="hop-legend">
+            <div class="hop-legend__title">Hop decay</div>
+            <div class="hop-row" v-for="(h, i) in hopLegendRender" :key="i">
+              <span class="hop-bar" :style="{ opacity: h.alpha }"></span>
+              <span>[[ h.label ]]</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- centre column — width is measured here (colW); everything inside derives from it -->
+      <div class="col col--center" :ref="setCenterCol">
+
+        <div class="toolbar">
+          <span class="toolbar__label">Focus</span>
+          <div class="seg">
+            <button v-for="m in ['none','highlight','filter']" :key="m" class="seg-opt"
+                    :class="{ 'seg-opt--selected': focus === m }" @click="setFocus(m)">[[ m ]]</button>
+          </div>
+
+          <span class="toolbar__label">Hops</span>
+          <div class="seg">
+            <button v-for="h in [1,2,3]" :key="h" class="seg-opt seg-opt--hop"
+                    :class="{ 'seg-opt--selected': hop === h }" @click="setHop(h)">[[ h ]]</button>
+          </div>
+
+          <button class="toolbar-pill" @click="toggleDir">[[ dir === 'both' ? '⇄ both directions' : '→ downstream only' ]]</button>
+          <button class="toolbar-pill" @click="toggleLabels">[[ labels ? 'labels on' : 'labels off' ]]</button>
+
+          <span class="toolbar__spacer"></span>
+
+          <span class="compare-badge" v-if="isCompare">⛓ synced pan · zoom · layer · selection</span>
+
+          <button class="toolbar-pill" @click="toggleTree">
+            <span class="pill__active-overlay" v-if="treeShown"></span>
+            <span class="pill__label">trace tree</span>
+          </button>
+          <span class="tree-squashed-note" v-if="treeWanted && !treeShown">pane needs a wider window</span>
+        </div>
+
+        <div class="center-body" :ref="setCanvasWrap">
+          <div class="canvas">
+            <svg :viewBox="'0 0 ' + graphWidth + ' ' + canvasHeight" preserveAspectRatio="xMidYMid slice" @click="svgClick">
+              <line v-for="e in edgesRender" :key="e.key"
+                    :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2"
+                    :stroke="e.stroke" :stroke-width="e.strokeWidth" :stroke-opacity="e.strokeOpacity" />
+              <template v-for="n in nodesRender" :key="n.id">
+                <rect v-if="n.shape === 'box'"
+                      :x="n.cx - n.r" :y="n.cy - n.r" :width="n.r * 2" :height="n.r * 2" rx="2"
+                      :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
+                      style="cursor:pointer" @click="select(n.id)" />
+                <polygon v-else-if="n.shape === 'diamond'"
+                      :points="diamondPoints(n)"
+                      :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
+                      style="cursor:pointer" @click="select(n.id)" />
+                <circle v-else
+                      :cx="n.cx" :cy="n.cy" :r="n.r"
+                      :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
+                      style="cursor:pointer" @click="select(n.id)" />
+                <circle v-if="n.hopRing" :cx="n.cx" :cy="n.cy" :r="n.ringR" fill="none"
+                      :stroke="n.ringColor" stroke-width="0.7" :stroke-opacity="n.ringOpacity" style="pointer-events:none" />
+                <text v-if="n.showLabel" :x="n.labelX" :y="n.labelY" :text-anchor="n.labelAnchor" :font-size="n.labelSize"
+                      font-family="'JetBrains Mono',monospace" fill="#201e1d" :fill-opacity="n.labelOpacity" style="pointer-events:none">[[ n.id ]]</text>
+              </template>
+            </svg>
+            <span class="canvas-tag">[[ cornerTag ]]</span>
+            <div class="minimap"><div class="minimap__viewport"></div></div>
+          </div>
+          <div class="tree-pane" v-if="treeShown">
+            <div class="tree-pane__header">
+              <span class="tree-pane__title">trace · [[ effectiveTreeRoot || 'click a node' ]]</span>
+              <button class="tree-pane__btn" @click="expandAllRows">expand</button>
+              <button class="tree-pane__btn" @click="collapseAllRows">collapse</button>
+            </div>
+            <div class="tree-cap-notice" v-if="treeData.capped">row cap reached — paths replicate shared nodes, deeper branches shown as "+n more"</div>
+            <div class="tree-rows">
+              <div class="tree-row" v-for="row in treeRowsRender" :key="row.key"
+                   :style="{ marginLeft: row.indent }" @click="select(row.id)">
+                <span class="tree-row__overlay" v-if="row.isMatch"></span>
+                <button class="tree-row__caret" @click.stop="toggleTreeRow(row)">[[ row.caret ]]</button>
+                <span class="tree-row__glyph">
+                  <span v-if="row.shape === 'circle'" class="tree-glyph-circle" :style="{ background: row.color }"></span>
+                  <span v-else-if="row.shape === 'box'" class="tree-glyph-box" :style="{ background: row.color }"></span>
+                  <span v-else class="tree-glyph-diamond" :style="{ background: row.color }"></span>
+                </span>
+                <span class="tree-row__id">[[ row.id ]]</span>
+                <span class="tree-row__rel">[[ row.rel ]]</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- right inspector -->
+      <div class="col col--inspector">
+        <div class="inspector-tabs">
+          <button class="inspector-tab" v-for="t in panelTabs" :key="t.key" @click="panel = t.key">
+            <span class="inspector-tab__active-overlay" v-if="panel === t.key"></span>
+            <span class="inspector-tab__label">[[ t.label ]]</span>
+          </button>
+        </div>
+
+        <div class="inspector-body">
+
+          <div class="node-tab" v-if="panel === 'node'">
+            <div class="node-tab__title">
+              <span class="node-glyph">
+                <span v-if="selClass.shape === 'circle'" class="node-glyph-circle" :style="{ background: selClass.color }"></span>
+                <span v-else-if="selClass.shape === 'box'" class="node-glyph-box" :style="{ background: selClass.color }"></span>
+                <span v-else class="node-glyph-diamond" :style="{ background: selClass.color }"></span>
+              </span>
+              <span class="node-tab__id">[[ selNode ? selNode.id : 'nothing selected' ]]</span>
+              <span class="node-tab__class-pill" v-if="selNode">[[ selNode.cls ]]</span>
+            </div>
+
+            <div class="metric-list">
+              <div class="metric-row" v-for="m in nodeMetrics" :key="m.label">
+                <span class="metric-row__label">[[ m.label ]]</span><span>[[ m.value ]]</span>
+              </div>
+            </div>
+
+            <div v-if="selNode">
+              <div class="section-label">Present in layers</div>
+              <div class="trace-chips">
+                <span class="trace-chip" v-for="chip in nodeTraceChips" :key="chip.label"
+                      :class="chip.present ? 'trace-chip--present' : 'trace-chip--absent'">[[ chip.label ]]</span>
+              </div>
+            </div>
+
+            <div class="neighbour-group" v-for="g in nodeGroups" :key="g.label">
+              <div class="neighbour-group__header"><span>[[ g.label ]]</span><span class="rail-header__spacer"></span><span>[[ g.count ]]</span></div>
+              <div class="neighbour-rows">
+                <div class="neighbour-row" v-for="r in g.rows" :key="r.id" @click="select(r.id)">
+                  <span class="neighbour-row__dot" :style="{ background: r.color }"></span>
+                  <span class="neighbour-row__id">[[ r.id ]]</span>
+                  <span class="neighbour-row__bar"><span class="neighbour-row__bar-fill" :style="{ width: r.pct }"></span></span>
+                  <span class="neighbour-row__w">[[ r.w ]]</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="node-tab__actions" v-if="selNode">
+              <button class="toolbar-pill" @click="focusNeighbourhood">focus neighbourhood</button>
+              <button class="toolbar-pill" @click="openInTree">root the trace tree here</button>
+            </div>
+          </div>
+
+          <div class="layer-tab" v-if="panel === 'layer'">
+            <div class="layer-tab__name">[[ activeLayer.name ]]</div>
+            <p class="layer-tab__rule">[[ activeLayer.rule ]]</p>
+            <div class="section-label">Delta over previous layer</div>
+            <table class="delta-table">
+              <thead><tr><th></th><th class="num">nodes</th><th class="num">edges</th></tr></thead>
+              <tbody>
+                <tr v-for="d in activeLayer.delta" :key="d.label">
+                  <td>[[ d.label ]]</td><td class="num">[[ d.nodes ]]</td><td class="num">[[ d.edges ]]</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="align-tab" v-if="panel === 'align'">
+            <div class="align-tab__header"><span>Alignment</span><span class="rail-header__spacer"></span><span>[[ matchLabel ]]</span></div>
+            <table class="align-table">
+              <thead><tr><th class="marker-col"></th><th>A</th><th>B</th><th class="num">reach A/B</th><th class="num">Δ</th></tr></thead>
+              <tbody>
+                <tr v-for="row in alignmentRows" :key="row.a" @click="select(row.a)">
+                  <td class="marker-col"><span class="align-marker" v-if="row.selected"></span></td>
+                  <td>[[ row.a ]]</td><td>[[ row.b ]]</td><td class="num">[[ row.deg ]]</td><td class="num">[[ row.delta ]]</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="js/graph-model.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

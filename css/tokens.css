@@ -1,0 +1,79 @@
+/* Organic — chrome design tokens, ported from design_handoff_semantic_box/reference/organic-styles.css.
+   Chrome (top bar, rails, toolbar, tree, inspector) reads these exclusively.
+   The canvas uses its own spectral-on-white palette, defined separately below —
+   see the two-palette rule in design_handoff_semantic_box/README.md. */
+
+:root {
+  --color-bg: #f5ead8;
+  --color-surface: #ebddc5;
+  --color-text: #201e1d;
+  --color-accent: #c67139;
+  --color-accent-2: #7a8a5e;
+  --color-divider: rgba(32, 30, 29, .16);
+
+  --color-neutral-100: #f9f4ed;
+  --color-neutral-200: #eee7db;
+  --color-neutral-300: #dcd3c4;
+  --color-neutral-400: #c0b6a5;
+  --color-neutral-500: #a19786;
+  --color-neutral-600: #82796a;
+  --color-neutral-700: #645c50;
+  --color-neutral-800: #474238;
+  --color-neutral-900: #2e2b25;
+
+  --color-accent-100: #fff2eb;
+  --color-accent-200: #ffe1d0;
+  --color-accent-300: #ffc6a5;
+  --color-accent-400: #f6a06b;
+  --color-accent-500: #d67f48;
+  --color-accent-600: #b2622d;
+  --color-accent-700: #8c491a;
+  --color-accent-800: #643312;
+  --color-accent-900: #402310;
+
+  --color-accent-2-100: #f0fae1;
+  --color-accent-2-200: #e1eecc;
+  --color-accent-2-300: #ccdbb2;
+  --color-accent-2-400: #aebf92;
+  --color-accent-2-500: #8fa073;
+  --color-accent-2-600: #728157;
+  --color-accent-2-700: #56633f;
+  --color-accent-2-800: #3d472b;
+  --color-accent-2-900: #272e1b;
+
+  /* This workspace deliberately drops Caprasimo (display face) — see README §Design tokens.
+     Figtree carries prose/titles, JetBrains Mono is the tool's working voice. */
+  --font-body: 'Figtree', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+
+  --space-1: 4.4px;
+  --space-2: 8.8px;
+  --space-3: 13.2px;
+  --space-4: 17.6px;
+  --space-6: 26.4px;
+  --space-8: 35.2px;
+
+  --shadow-sm: 0 1px 2px rgba(46, 43, 37, .14);
+  --shadow-md: 0 3px 10px rgba(46, 43, 37, .16);
+  --shadow-lg: 0 12px 32px rgba(46, 43, 37, .22);
+}
+
+/* Canvas data palette — full-spectrum categorical, tuned against white, one hue
+   per node class. Never used in chrome except as a class swatch (legend dot,
+   tree row dot, inspector dot). See README "The two-palette rule". */
+:root {
+  --canvas-ground: #ffffff;
+  --canvas-grid-ink: rgba(32, 30, 29, .10);
+  --canvas-node-halo: #ffffff;
+  --canvas-edge-ink: rgba(26, 28, 38, .62);
+  --canvas-edge-ink-rest: rgba(32, 30, 29, .34);
+  --canvas-select-stroke: #201e1d;
+}
+
+/* Node class colour + shape (MicroRNA / Messenger RNA / Pathway) live in
+   js/graph-model.js CLASSES — canvas fills need JS values for computed SVG
+   attributes, so that's the single source of truth; not duplicated here. */
