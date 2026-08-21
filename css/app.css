@@ -352,6 +352,7 @@ body {
   background-size: 18px 18px;
   box-shadow: inset 0 0 0 1px rgba(32, 30, 29, .10);
 }
+.canvas--divided { border-right: 1px solid var(--color-divider); }
 .canvas svg {
   position: absolute;
   inset: 0;

@@ -14,6 +14,14 @@ createApp({
       paneH: undefined,
       treeWanted: true,
 
+      // Tri-state, same idiom as the reference prototype's `tree` field:
+      // null = follow the mode's default (open in Layers, collapsed in
+      // Compare, where the split canvas needs the width); true/false = an
+      // explicit override for as long as this mode is active. Reset to null
+      // on every mode switch — see showLayers()/showCompare().
+      railOpen: null,
+      inspectorOpen: null,
+
       // Both real graphs are loaded up front (see mounted()); the top bar's
       // dataset switch just changes which one `model` points at, so "view the
       // first / second graph separately" is a plain state flip, and the other
@@ -61,12 +69,34 @@ createApp({
       return this.treeWanted && (this.colW === undefined || this.colW >= 640);
     },
 
+    // Total space available for the graph area (both canvases combined in
+    // compare mode) — derived from colW alone, same rule as treeShown.
     graphWidth() {
       const colW = this.colW || 0;
       return Math.max(60, Math.round(colW - (this.treeShown ? 280 : 0) - 4));
     },
+    // Per-canvas width: halved in compare mode, where two canvases sit
+    // side by side split by a divider (see README "Compare mode").
+    canvasWidth() {
+      return Math.max(240, Math.round(this.graphWidth / (this.isCompare ? 2 : 1)));
+    },
     canvasHeight() {
       return Math.max(200, this.paneH || 480);
+    },
+
+    // Same null-follows-default / explicit-override idiom as treeShown, but
+    // gated on mode rather than measured width — collapsing the side chrome
+    // is a deliberate space trade for compare mode, not a responsive reflow.
+    railShown() {
+      return this.railOpen === null ? !this.isCompare : this.railOpen;
+    },
+    inspectorShown() {
+      return this.inspectorOpen === null ? !this.isCompare : this.inspectorOpen;
+    },
+    gridTemplateColumns() {
+      const rail = this.railShown ? 'minmax(190px,250px) ' : '';
+      const inspector = this.inspectorShown ? ' minmax(220px,300px)' : '';
+      return rail + 'minmax(0,1fr)' + inspector;
     },
 
     model() { return this.datasets[this.activeDataset]; },
@@ -159,14 +189,22 @@ createApp({
       });
     },
 
-    // The other loaded dataset, used by the Alignment tab in compare mode —
-    // no second canvas yet (dual-canvas rendering is a later step).
+    // The other loaded dataset — feeds both the Alignment tab and canvas B in
+    // compare mode. Selection is shared: the same id is looked up in both
+    // graphs independently, so a shared gene highlights in both when present
+    // and simply doesn't match in the one where it's missing.
     viewB() {
       if (!this.isCompare) return null;
       return computeView(this.modelB, {
-        selected: null, hop: this.hop, dir: this.dir,
+        selected: this.selected, hop: this.hop, dir: this.dir,
         active: this.active, vis: this.vis, cls: this.cls,
       });
+    },
+
+    cornerTagB() {
+      const v = this.viewB;
+      if (!v) return '';
+      return 'L0 · ' + this.otherDatasetKey + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop';
     },
 
     panelTabs() {
@@ -259,8 +297,21 @@ createApp({
       });
     },
 
-    edgesRender() {
-      const v = this.view, W = this.graphWidth, H = this.canvasHeight;
+    edgesRender() { return this.computeEdgesFor(this.view); },
+    nodesRender() { return this.computeNodesFor(this.view); },
+    edgesRenderB() { return this.viewB ? this.computeEdgesFor(this.viewB) : []; },
+    nodesRenderB() { return this.viewB ? this.computeNodesFor(this.viewB) : []; },
+  },
+
+  methods: {
+    showLayers() { this.mode = 'layers'; if (this.panel === 'align') this.panel = 'node'; this.railOpen = null; this.inspectorOpen = null; },
+    showCompare() { this.mode = 'compare'; this.panel = 'align'; this.railOpen = null; this.inspectorOpen = null; },
+
+    toggleRail() { this.railOpen = !this.railShown; },
+    toggleInspector() { this.inspectorOpen = !this.inspectorShown; },
+
+    computeEdgesFor(v) {
+      const W = this.canvasWidth, H = this.canvasHeight;
       const alpha = DECAY[this.decayCurve];
       const filtering = this.focus === 'filter' && v.sel;
       const dim = this.focus === 'none' || !v.sel ? 1 : 0.1;
@@ -285,8 +336,8 @@ createApp({
       return out;
     },
 
-    nodesRender() {
-      const v = this.view, W = this.graphWidth, H = this.canvasHeight;
+    computeNodesFor(v) {
+      const W = this.canvasWidth, H = this.canvasHeight;
       const alpha = DECAY[this.decayCurve];
       const filtering = this.focus === 'filter' && v.sel;
       const dim = this.focus === 'none' || !v.sel ? 1 : 0.1;
@@ -320,11 +371,6 @@ createApp({
       });
       return out;
     },
-  },
-
-  methods: {
-    showLayers() { this.mode = 'layers'; if (this.panel === 'align') this.panel = 'node'; },
-    showCompare() { this.mode = 'compare'; this.panel = 'align'; },
 
     setDataset(key) {
       if (this.activeDataset === key) return;
