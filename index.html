@@ -17,8 +17,13 @@
     <!-- top bar · 52px -->
     <div class="topbar">
       <span class="topbar__wordmark">semantic box</span>
+      <div class="seg">
+        <button class="seg-opt" v-for="k in datasetKeys" :key="k"
+                :class="{ 'seg-opt--selected': activeDataset === k }" @click="setDataset(k)">[[ k ]]</button>
+      </div>
       <span class="topbar__dataset">[[ datasetLabel ]]</span>
       <span class="topbar__spacer"></span>
+      <span class="load-error" v-if="loadError">load error: [[ loadError ]]</span>
       <input class="search-input" placeholder="search &amp; jump" v-model="query">
       <button class="pill" @click="showLayers">
         <span class="pill__active-overlay" v-if="isLayers"></span>
@@ -256,7 +261,10 @@
 </div>
 
 <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+<script src="js/csv.js"></script>
+<script src="js/layout.js"></script>
 <script src="js/graph-model.js"></script>
+<script src="js/data-loader.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

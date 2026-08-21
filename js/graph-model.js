@@ -15,17 +15,6 @@ const DECAY = {
   steep: [1, 0.85, 0.35, 0.12],
 };
 
-// Stage-3 placeholder build-stack, ported at full fidelity from the reference
-// prototype's LAYERS. Our real CSVs are flat tripartite snapshots with no such
-// construction layers — this stands in until the real-data step decides
-// whether layers become meaningful here (e.g. a confidence tier) or drop away.
-const LAYERS = [
-  { name: 'L0 · source', rule: 'Imported source relations — the ground truth this stack is built over.', delta: [{ label: 'imported', nodes: '1 204', edges: '4 880' }] },
-  { name: 'L1 · co-occurrence', rule: 'Built over L0: pairs co-occurring at least 3 times become an undirected relation.', delta: [{ label: 'kept', nodes: '1 204', edges: '4 880' }, { label: 'added', nodes: '436', edges: '3 560' }, { label: 'dropped', nodes: '0', edges: '14' }] },
-  { name: 'L2 · inferred', rule: 'Built over L1: inference rules add directed relations where a path of length 2 is supported.', delta: [{ label: 'kept', nodes: '1 640', edges: '8 440' }, { label: 'added', nodes: '262', edges: '3 462' }, { label: 'dropped', nodes: '0', edges: '0' }] },
-  { name: 'L3 · clustered', rule: 'Built over L2: community detection groups nodes and promotes each cluster to a node.', delta: [{ label: 'kept', nodes: '1 902', edges: '11 902' }, { label: 'added', nodes: '282', edges: '1 118' }, { label: 'dropped', nodes: '0', edges: '212' }] },
-];
-
 // Neutral ink — edges never take a class hue; emphasis comes from stroke
 // weight and hop-decay opacity only.
 const CANVAS_INK = {
@@ -35,53 +24,6 @@ const CANVAS_INK = {
   selectStroke: '#201e1d',
   labelInk: '#201e1d',
 };
-
-function seededRng(seed) {
-  let s = seed * 7919 + 13;
-  return () => (s = (s * 16807) % 2147483647) / 2147483647;
-}
-
-// Stage-2 placeholder: seeded synthetic tripartite graph on a random scatter,
-// standing in for real CSV data + a proper layered layout (final step of
-// this build). Edges only ever run MicroRNA -> Messenger RNA -> Pathway,
-// matching the shape of the real data.
-function generateMockGraph(seed) {
-  const r = seededRng(seed);
-  const counts = { MicroRNA: 16, 'Messenger RNA': 40, Pathway: 12 };
-  // Weighted so L0 carries the bulk, echoing the reference build-stack's
-  // shape (each layer adds progressively fewer nodes than it inherits).
-  const pickLayer = () => {
-    const p = r();
-    return p < 0.55 ? 0 : p < 0.80 ? 1 : p < 0.92 ? 2 : 3;
-  };
-  const nodes = [];
-  const byClass = { MicroRNA: [], 'Messenger RNA': [], Pathway: [] };
-  Object.keys(counts).forEach(cls => {
-    for (let i = 0; i < counts[cls]; i++) {
-      const n = { id: cls.replace(/\s+/g, '').slice(0, 2).toLowerCase() + '-' + i, cls, x: r(), y: r(), layer: pickLayer() };
-      nodes.push(n);
-      byClass[cls].push(n);
-    }
-  });
-
-  const edges = [];
-  const seen = new Set();
-  const addEdge = (a, b, rel) => {
-    const k = a.id + '>' + b.id;
-    if (seen.has(k)) return;
-    seen.add(k);
-    edges.push({ s: a.id, t: b.id, rel, w: Math.round(r() * 95) / 100, layer: Math.max(a.layer, b.layer) });
-  };
-  byClass.MicroRNA.forEach(mi => {
-    const k = 1 + Math.floor(r() * 4);
-    for (let j = 0; j < k; j++) addEdge(mi, byClass['Messenger RNA'][Math.floor(r() * counts['Messenger RNA'])], 'regulates');
-  });
-  byClass['Messenger RNA'].forEach(mr => {
-    const k = 1 + Math.floor(r() * 3);
-    for (let j = 0; j < k; j++) addEdge(mr, byClass.Pathway[Math.floor(r() * counts.Pathway)], 'in_pathway');
-  });
-  return { nodes, edges };
-}
 
 // Derives the filtered view (class + layer ceiling + layer visibility),
 // adjacency, degree and BFS hop-distance (from the selected node) for one

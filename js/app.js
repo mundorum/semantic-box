@@ -7,7 +7,6 @@ createApp({
     return {
       mode: 'layers',           // 'layers' | 'compare'
       query: '',                 // search box — not yet wired (design intent only)
-      datasetLabel: '◦ luminal-a · run 1',
 
       // Measured column box. The graph width is DERIVED from colW, never measured
       // directly — see README "Critical layout constraint".
@@ -15,19 +14,27 @@ createApp({
       paneH: undefined,
       treeWanted: true,
 
-      // Stage-2 mock graph — replaced by real CSV data + a layered layout once
-      // every panel is wired (see js/graph-model.js).
-      model: generateMockGraph(1),
-      modelB: generateMockGraph(2), // stands in for a loaded "graph B" — only used by the Alignment tab in compare mode
+      // Both real graphs are loaded up front (see mounted()); the top bar's
+      // dataset switch just changes which one `model` points at, so "view the
+      // first / second graph separately" is a plain state flip, and the other
+      // one is already sitting in memory for the Alignment tab (viewB).
+      datasets: {
+        'luminal-a': { nodes: [], edges: [] },
+        'luminal-b': { nodes: [], edges: [] },
+      },
+      datasetKeys: ['luminal-a', 'luminal-b'],
+      activeDataset: 'luminal-a',
+      loadError: null,
       decayCurve: 'standard',
 
       panel: 'node', // 'node' | 'layer' | 'align'
 
-      // Stage-3 mock build-stack — see LAYERS in graph-model.js for why this
-      // doesn't reflect real construction layers yet.
-      active: 3,
-      vis: [true, true, true, true],
-      op: [30, 55, 80, 100],
+      // The real data is a flat tripartite snapshot, not a build-stack, so
+      // there's exactly one real "layer" (see layersMeta) — active/vis/op
+      // stay single-element arrays/indices to match.
+      active: 0,
+      vis: [true],
+      op: [100],
       cls: { MicroRNA: true, 'Messenger RNA': true, Pathway: true },
 
       selected: null,
@@ -62,6 +69,26 @@ createApp({
       return Math.max(200, this.paneH || 480);
     },
 
+    model() { return this.datasets[this.activeDataset]; },
+    otherDatasetKey() { return this.activeDataset === 'luminal-a' ? 'luminal-b' : 'luminal-a'; },
+    modelB() { return this.datasets[this.otherDatasetKey]; },
+
+    datasetLabel() {
+      const m = this.model;
+      return '◦ ' + this.activeDataset + ' · ' + m.nodes.length + ' n · ' + m.edges.length + ' e';
+    },
+
+    // Real data is one flat snapshot — collapses the mock 4-layer build-stack
+    // (stage 3) down to a single real "loaded" layer. See js/data-loader.js.
+    layersMeta() {
+      const m = this.model;
+      return [{
+        name: 'L0 · ' + this.activeDataset,
+        rule: 'MicroRNA regulates Messenger RNA; Messenger RNA produces proteins that are part of Pathways. Loaded from examples/' + this.activeDataset + '_{nodes,edges}.csv.',
+        delta: [{ label: 'loaded', nodes: String(m.nodes.length), edges: String(m.edges.length) }],
+      }];
+    },
+
     view() {
       return computeView(this.model, {
         selected: this.selected, hop: this.hop, dir: this.dir,
@@ -71,11 +98,11 @@ createApp({
 
     cornerTag() {
       const v = this.view;
-      return LAYERS[this.active].name + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop';
+      return this.layersMeta[this.active].name + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop';
     },
 
     layersRender() {
-      return LAYERS.map((l, i) => ({ l, i })).reverse().map(({ l, i }) => ({
+      return this.layersMeta.map((l, i) => ({ l, i })).reverse().map(({ l, i }) => ({
         i, name: l.name,
         counts: this.vis[i] ? this.model.nodes.filter(n => n.layer === i).length + ' n' : 'hidden',
         opacity: this.op[i],
@@ -132,9 +159,8 @@ createApp({
       });
     },
 
-    // Graph B only exists to give the Alignment tab something to compare
-    // against in compare mode — no second canvas yet (real dual-graph
-    // loading is a later step).
+    // The other loaded dataset, used by the Alignment tab in compare mode —
+    // no second canvas yet (dual-canvas rendering is a later step).
     viewB() {
       if (!this.isCompare) return null;
       return computeView(this.modelB, {
@@ -173,7 +199,7 @@ createApp({
 
     nodeTraceChips() {
       const sel = this.selNode;
-      return LAYERS.map((l, i) => ({
+      return this.layersMeta.map((l, i) => ({
         label: 'L' + i,
         present: sel ? sel.layer <= i : false,
         absent: sel ? sel.layer > i : true,
@@ -206,7 +232,7 @@ createApp({
       return groups;
     },
 
-    activeLayer() { return LAYERS[this.active]; },
+    activeLayer() { return this.layersMeta[this.active]; },
 
     matchLabel() {
       const A = this.view, B = this.viewB;
@@ -300,6 +326,25 @@ createApp({
     showLayers() { this.mode = 'layers'; if (this.panel === 'align') this.panel = 'node'; },
     showCompare() { this.mode = 'compare'; this.panel = 'align'; },
 
+    setDataset(key) {
+      if (this.activeDataset === key) return;
+      this.activeDataset = key;
+      this.selected = null;
+      this.treeRoot = null;
+      this.open = {};
+      this.baseDepth = 2;
+    },
+
+    // One-shot: mirrors the reference prototype's componentDidMount auto-
+    // select, run from a lifecycle hook once data exists — never during render.
+    autoSelect() {
+      if (this._autoSelected || this.selected) return;
+      const nodes = this.model.nodes;
+      if (!nodes.length) return;
+      this._autoSelected = true;
+      this.select(nodes[0].id);
+    },
+
     // Identity-guarded ref callbacks: re-renders must not thrash the observer.
     setCenterCol(el) {
       if (this._centerCol === el) return;
@@ -377,7 +422,7 @@ createApp({
     },
   },
 
-  mounted() {
+  async mounted() {
     if (window.ResizeObserver) {
       this._ro = new ResizeObserver(() => this.measure());
       if (this._centerCol) this._ro.observe(this._centerCol);
@@ -386,6 +431,14 @@ createApp({
     this._onResize = () => this.measure();
     window.addEventListener('resize', this._onResize);
     this.measure();
+
+    try {
+      const [a, b] = await Promise.all([loadDataset('luminal-a'), loadDataset('luminal-b')]);
+      this.datasets = { 'luminal-a': a, 'luminal-b': b };
+      this.autoSelect();
+    } catch (err) {
+      this.loadError = String(err && err.message || err);
+    }
   },
 
   beforeUnmount() {
