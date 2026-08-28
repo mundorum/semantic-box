@@ -15,6 +15,17 @@ const DECAY = {
   steep: [1, 0.85, 0.35, 0.12],
 };
 
+// Short display labels for the five breast-cancer-subtype example datasets —
+// the dataset key doubles as the examples/<key>_{nodes,edges}.csv prefix, so
+// it can't just be shortened outright; this is copy only.
+const DATASET_LABELS = {
+  'normal': 'normal',
+  'basal-like': 'basal',
+  'her2-enriched': 'her2',
+  'luminal-a': 'luminal-a',
+  'luminal-b': 'luminal-b',
+};
+
 // Neutral ink — edges never take a class hue; emphasis comes from stroke
 // weight and hop-decay opacity only.
 const CANVAS_INK = {
@@ -135,8 +146,13 @@ function computeView(model, state) {
       const cur = q.shift();
       const d = dist[cur];
       if (d >= state.hop) continue;
-      const nb = (out[cur] || []).map(e => e.t)
-        .concat(state.dir === 'both' ? (inn[cur] || []).map(e => e.s) : []);
+      // 'down' follows outgoing edges only, 'up' follows incoming edges only
+      // (upstream causes/regulators of the selection), 'both' follows either.
+      const nb = state.dir === 'up'
+        ? (inn[cur] || []).map(e => e.s)
+        : state.dir === 'both'
+          ? (out[cur] || []).map(e => e.t).concat((inn[cur] || []).map(e => e.s))
+          : (out[cur] || []).map(e => e.t);
       nb.forEach(id => {
         if (dist[id] === undefined) { dist[id] = d + 1; q.push(id); }
       });

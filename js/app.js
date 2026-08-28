@@ -22,16 +22,21 @@ createApp({
       railOpen: null,
       inspectorOpen: null,
 
-      // Both real graphs are loaded up front (see mounted()); the top bar's
-      // dataset switch just changes which one `model` points at, so "view the
-      // first / second graph separately" is a plain state flip, and the other
-      // one is already sitting in memory for the Alignment tab (viewB).
+      // All five real subtype snapshots are loaded up front (see mounted());
+      // the top bar's dataset switch just changes which one `model` points
+      // at. `compareDataset` picks the second one for Compare mode's canvas
+      // B / the Alignment tab — see setDataset()/setCompareDataset() for how
+      // the two are kept distinct.
       datasets: {
+        'normal': { nodes: [], edges: [] },
+        'basal-like': { nodes: [], edges: [] },
+        'her2-enriched': { nodes: [], edges: [] },
         'luminal-a': { nodes: [], edges: [] },
         'luminal-b': { nodes: [], edges: [] },
       },
-      datasetKeys: ['luminal-a', 'luminal-b'],
+      datasetKeys: ['normal', 'basal-like', 'her2-enriched', 'luminal-a', 'luminal-b'],
       activeDataset: 'luminal-a',
+      compareDataset: 'luminal-b',
       loadError: null,
       decayCurve: 'standard',
 
@@ -48,8 +53,13 @@ createApp({
       selected: null,
       focus: 'highlight',       // 'none' | 'highlight' | 'filter'
       hop: 2,                    // 1 | 2 | 3
-      dir: 'down',                // 'down' | 'both'
+      dir: 'down',                // 'down' | 'up' | 'both'
       labels: true,
+
+      // Canvas overlays: the corner info band and the minimap can both cover
+      // graph content on a dense layout — independently hideable.
+      cornerTagShown: true,
+      minimapShown: true,
 
       // Messenger RNA -> Pathway q-value filter. null = follow the current
       // dataset's minimum (i.e. no filtering) — same null-follows-default
@@ -121,12 +131,11 @@ createApp({
     },
 
     model() { return this.datasets[this.activeDataset]; },
-    otherDatasetKey() { return this.activeDataset === 'luminal-a' ? 'luminal-b' : 'luminal-a'; },
-    modelB() { return this.datasets[this.otherDatasetKey]; },
+    modelB() { return this.datasets[this.compareDataset]; },
 
     datasetLabel() {
       const m = this.model;
-      return '◦ ' + this.activeDataset + ' · ' + m.nodes.length + ' n · ' + m.edges.length + ' e';
+      return '◦ ' + DATASET_LABELS[this.activeDataset] + ' · ' + m.nodes.length + ' n · ' + m.edges.length + ' e';
     },
 
     // Real data is one flat snapshot — collapses the mock 4-layer build-stack
@@ -175,6 +184,14 @@ createApp({
         active: this.active, vis: this.vis, cls: this.cls,
         qThreshold: this.effectiveQThreshold, hideOrphanMrna: this.hideOrphanMrna,
       });
+    },
+
+    dirOptions() {
+      return [
+        { key: 'down', label: '→ down', title: 'downstream only — follow outgoing edges' },
+        { key: 'up', label: '← up', title: 'upstream only — follow incoming edges' },
+        { key: 'both', label: '⇄ both', title: 'both directions' },
+      ];
     },
 
     nsmSuffix() {
@@ -262,7 +279,7 @@ createApp({
     cornerTagB() {
       const v = this.viewB;
       if (!v) return '';
-      return 'L0 · ' + this.otherDatasetKey + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop' + this.nsmSuffix;
+      return 'L0 · ' + DATASET_LABELS[this.compareDataset] + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop' + this.nsmSuffix;
     },
 
     nsmMetricOptions() {
@@ -275,7 +292,7 @@ createApp({
       return computeNsmMarks(
         this.nsmMetric, this.nsmState,
         this.model.nodes, this.modelB.nodes,
-        this.otherDatasetKey, this.activeDataset
+        this.compareDataset, this.activeDataset
       );
     },
 
@@ -302,7 +319,7 @@ createApp({
         { label: 'class · shape', value: sel.cls + ' · ' + c.shape },
         { label: 'out / in degree', value: (v.out[sel.id] || []).length + ' / ' + (v.inn[sel.id] || []).length },
         { label: 'reached · ' + this.hop + ' hop', value: (Object.keys(v.dist).length - 1) + ' nodes' },
-        { label: 'trace direction', value: this.dir === 'both' ? 'both' : 'downstream' },
+        { label: 'trace direction', value: this.dir === 'both' ? 'both' : (this.dir === 'up' ? 'upstream' : 'downstream') },
         { label: 'tree rows', value: this.treeData.rows.length + (this.treeData.capped ? ' (capped)' : '') },
       ];
     },
@@ -343,12 +360,17 @@ createApp({
         w: w.toFixed(2), pct: Math.round(w * 100) + '%',
         color: CLASS_MAP[v.live[id] ? v.live[id].cls : 'Messenger RNA'].color,
       }));
+      // Which raw neighbour lists to show mirrors the BFS traversal direction:
+      // downstream-only hides incoming, upstream-only hides outgoing, both
+      // shows both — see computeView's BFS in graph-model.js.
       const groups = [];
-      groups.push({
-        label: 'outgoing · hop 1', count: (v.out[sel.id] || []).length,
-        rows: rowsFor((v.out[sel.id] || []).map(e => ({ id: e.t, w: e.w }))),
-      });
-      if (this.dir === 'both') {
+      if (this.dir !== 'up') {
+        groups.push({
+          label: 'outgoing · hop 1', count: (v.out[sel.id] || []).length,
+          rows: rowsFor((v.out[sel.id] || []).map(e => ({ id: e.t, w: e.w }))),
+        });
+      }
+      if (this.dir !== 'down') {
         groups.push({
           label: 'incoming · hop 1', count: (v.inn[sel.id] || []).length,
           rows: rowsFor((v.inn[sel.id] || []).map(e => ({ id: e.s, w: e.w }))),
@@ -417,8 +439,14 @@ createApp({
     computeEdgesFor(v) {
       const W = this.canvasWidth, H = this.canvasHeight;
       const alpha = DECAY[this.decayCurve];
-      const filtering = this.focus === 'filter' && v.sel;
-      const dim = this.focus === 'none' || !v.sel ? 1 : 0.1;
+      // Dim/filter decisions key off the GLOBAL selection (this.selected),
+      // not this view's resolved v.sel: in compare mode, a selection that
+      // exists in the current dataset but has no counterpart in the other
+      // one must still dim/hide that side's nodes (nothing here is "in the
+      // subgraph"), rather than reading as focus:none and lighting up every
+      // node at full opacity just because v.sel came back null.
+      const filtering = this.focus === 'filter' && this.selected;
+      const dim = this.focus === 'none' || !this.selected ? 1 : 0.1;
       const X = n => 24 + n.x * (W - 48);
       const Y = n => 24 + n.y * (H - 48);
       const out = [];
@@ -447,9 +475,16 @@ createApp({
     computeNodesFor(v, marks) {
       const W = this.canvasWidth, H = this.canvasHeight;
       const alpha = DECAY[this.decayCurve];
-      const filtering = this.focus === 'filter' && v.sel;
-      const dim = this.focus === 'none' || !v.sel ? 1 : 0.1;
+      // See the matching comment in computeEdgesFor: key off the global
+      // selection, not this view's own (possibly null) resolved v.sel.
+      const filtering = this.focus === 'filter' && this.selected;
+      const dim = this.focus === 'none' || !this.selected ? 1 : 0.1;
       const nsmActive = this.nsmMetric !== 'none';
+      // NSM mode only takes over labelling ("only marked nodes get a label")
+      // when there's something to mark — with no NSM data at all (every
+      // example dataset here lacks the *_descending/*_ascending columns),
+      // marks is always empty and this would otherwise blank every label.
+      const hasMarks = Object.keys(marks).length > 0;
       const out = [];
       v.nodes.forEach(n => {
         const sub = v.sel && v.dist[n.id] !== undefined;
@@ -462,13 +497,14 @@ createApp({
         const layerOp = (this.op[n.layer] ?? 100) / 100;
         const op = (sub ? alpha[Math.min(hop, 3)] : dim) * layerOp;
 
-        // NSM mode replaces the usual "selected + hop<=1" label rule with
+        // NSM mode replaces the usual "selected + hop<=2" label rule with
         // "only marked nodes" — otherwise a few hundred faded genes would
-        // still all carry labels and bury the ones that actually matter here.
+        // still all carry labels and bury the ones that actually matter here
+        // — but only once NSM actually has marks to show (see hasMarks above).
         const mark = marks[n.id];
-        const showLabel = nsmActive
+        const showLabel = nsmActive && hasMarks
           ? (this.labels && !!mark)
-          : (this.labels && (isSel || (sub && hop <= 1)));
+          : (this.labels && (isSel || (sub && hop <= 2)));
         const labelText = n.label || n.id;
         const tw = String(labelText).length * (isSel ? 6.6 : 5.4);
         const flip = px + r + 4 + tw > W - 6 && px - r - 4 - tw > 6;
@@ -492,14 +528,25 @@ createApp({
       return out;
     },
 
+    dsLabel(key) { return DATASET_LABELS[key] || key; },
+
+    // Picking the dataset that's already B swaps A/B instead of colliding —
+    // there's no meaningful "other" default among five datasets the way
+    // there was with exactly two, so A and B just stay distinct by construction.
     setDataset(key) {
       if (this.activeDataset === key) return;
+      if (this.compareDataset === key) this.compareDataset = this.activeDataset;
       this.activeDataset = key;
       this.selected = null;
       this.treeRoot = null;
       this.open = {};
       this.baseDepth = 2;
       this.qThreshold = null;
+    },
+    setCompareDataset(key) {
+      if (this.compareDataset === key) return;
+      if (this.activeDataset === key) this.activeDataset = this.compareDataset;
+      this.compareDataset = key;
     },
 
     // One-shot: mirrors the reference prototype's componentDidMount auto-
@@ -621,9 +668,11 @@ createApp({
 
     setFocus(mode) { this.focus = mode; },
     setHop(n) { this.hop = n; },
-    toggleDir() { this.dir = this.dir === 'both' ? 'down' : 'both'; },
+    setDir(mode) { this.dir = mode; },
     toggleLabels() { this.labels = !this.labels; },
     toggleTree() { this.treeWanted = !this.treeWanted; },
+    toggleCornerTag() { this.cornerTagShown = !this.cornerTagShown; },
+    toggleMinimap() { this.minimapShown = !this.minimapShown; },
 
     setNsmMetric(key) { this.nsmMetric = key; },
     setNsmState(state) { this.nsmState = state; },
@@ -669,8 +718,11 @@ createApp({
     this.measure();
 
     try {
-      const [a, b] = await Promise.all([loadDataset('luminal-a'), loadDataset('luminal-b')]);
-      this.datasets = { 'luminal-a': a, 'luminal-b': b };
+      const keys = this.datasetKeys;
+      const loaded = await Promise.all(keys.map(k => loadDataset(k)));
+      const datasets = {};
+      keys.forEach((k, i) => { datasets[k] = loaded[i]; });
+      this.datasets = datasets;
       this.autoSelect();
     } catch (err) {
       this.loadError = String(err && err.message || err);

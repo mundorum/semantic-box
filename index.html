@@ -19,9 +19,16 @@
       <span class="topbar__wordmark">semantic box</span>
       <div class="seg">
         <button class="seg-opt" v-for="k in datasetKeys" :key="k"
-                :class="{ 'seg-opt--selected': activeDataset === k }" @click="setDataset(k)">[[ k ]]</button>
+                :class="{ 'seg-opt--selected': activeDataset === k }" @click="setDataset(k)">[[ dsLabel(k) ]]</button>
       </div>
       <span class="topbar__dataset">[[ datasetLabel ]]</span>
+      <template v-if="isCompare">
+        <span class="topbar__vs">vs</span>
+        <select class="nsm-select" :value="compareDataset" @change="setCompareDataset($event.target.value)"
+                title="second dataset for canvas B / the Alignment tab">
+          <option v-for="k in datasetKeys" :key="k" :value="k">[[ dsLabel(k) ]]</option>
+        </select>
+      </template>
       <span class="topbar__spacer"></span>
       <span class="load-error" v-if="loadError">load error: [[ loadError ]]</span>
       <input class="search-input" placeholder="search &amp; jump" v-model="query">
@@ -130,9 +137,22 @@
                     :class="{ 'seg-opt--selected': hop === h }" @click="setHop(h)">[[ h ]]</button>
           </div>
 
-          <button class="toolbar-pill" @click="toggleDir">[[ dir === 'both' ? '⇄ both directions' : '→ downstream only' ]]</button>
+          <span class="toolbar__label">Direction</span>
+          <div class="seg">
+            <button v-for="d in dirOptions" :key="d.key" class="seg-opt"
+                    :class="{ 'seg-opt--selected': dir === d.key }" @click="setDir(d.key)" :title="d.title">[[ d.label ]]</button>
+          </div>
+
           <button class="toolbar-pill" @click="toggleLabels">[[ labels ? 'labels on' : 'labels off' ]]</button>
           <button class="toolbar-pill" @click="resetView" title="reset pan and zoom">reset view</button>
+          <button class="toolbar-pill" @click="toggleCornerTag" title="show/hide the info band in the top-left corner of the graph">
+            <span class="pill__active-overlay" v-if="cornerTagShown"></span>
+            <span class="pill__label">info band</span>
+          </button>
+          <button class="toolbar-pill" @click="toggleMinimap" title="show/hide the minimap">
+            <span class="pill__active-overlay" v-if="minimapShown"></span>
+            <span class="pill__label">minimap</span>
+          </button>
 
           <span class="toolbar__label">Compare by</span>
           <select class="nsm-select" :value="nsmMetric" @change="setNsmMetric($event.target.value)">
@@ -183,8 +203,8 @@
                 </template>
               </g>
             </svg>
-            <span class="canvas-tag">[[ cornerTag ]]</span>
-            <div class="minimap"><div class="minimap__viewport" :style="minimapViewportStyle"></div></div>
+            <span class="canvas-tag" v-if="cornerTagShown">[[ cornerTag ]]</span>
+            <div class="minimap" v-if="minimapShown"><div class="minimap__viewport" :style="minimapViewportStyle"></div></div>
           </div>
 
           <!-- compare mode: two canvases side by side, split by a divider, sharing
@@ -218,8 +238,8 @@
                   </template>
                 </g>
               </svg>
-              <span class="canvas-tag">A · [[ cornerTag ]]</span>
-              <div class="minimap"><div class="minimap__viewport" :style="minimapViewportStyle"></div></div>
+              <span class="canvas-tag" v-if="cornerTagShown">A · [[ cornerTag ]]</span>
+              <div class="minimap" v-if="minimapShown"><div class="minimap__viewport" :style="minimapViewportStyle"></div></div>
             </div>
             <div class="canvas" @wheel.prevent="onWheel" @pointerdown="onPointerDown">
               <svg :viewBox="'0 0 ' + canvasWidth + ' ' + canvasHeight" preserveAspectRatio="xMidYMid slice" @click="svgClick">
@@ -249,8 +269,8 @@
                   </template>
                 </g>
               </svg>
-              <span class="canvas-tag">B · [[ cornerTagB ]]</span>
-              <div class="minimap"><div class="minimap__viewport" :style="minimapViewportStyle"></div></div>
+              <span class="canvas-tag" v-if="cornerTagShown">B · [[ cornerTagB ]]</span>
+              <div class="minimap" v-if="minimapShown"><div class="minimap__viewport" :style="minimapViewportStyle"></div></div>
             </div>
           </template>
 

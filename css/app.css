@@ -39,6 +39,10 @@ body {
   font: 400 11px/1 var(--font-mono);
   color: var(--color-neutral-600);
 }
+.topbar__vs {
+  font: 400 10px/1 var(--font-mono);
+  color: var(--color-neutral-600);
+}
 .topbar__spacer { flex: 1; }
 
 .search-input {

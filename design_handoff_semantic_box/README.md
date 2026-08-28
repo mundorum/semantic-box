@@ -213,8 +213,10 @@ Section labels are JetBrains Mono 500 9px, `.06em`, uppercase, `--color-neutral-
 
 - `Focus` segmented control — `none` / `highlight` / `filter`. Track: `padding:2px`, `1px solid #c0b6a5`, `999px`, `background:#f9f4ed`. Option: `padding:5px 11px`, JetBrains Mono 500 10px. Selected: `999px` fill `#c67139`, ink `#f9f4ed`; unselected ink `--color-neutral-700`. Default `highlight`.
 - `Hops` segmented control — `1` / `2` / `3`, each option 26px wide. Default `2`.
-- Direction toggle — pill. Labels: `→ downstream only` / `⇄ both directions`. Default downstream.
+- `Direction` segmented control — three options, not a toggle: `→ down` (downstream only — follow outgoing edges), `← up` (upstream only — follow incoming edges), `⇄ both`. Default `→ down`. Affects BFS (see below), the inspector's outgoing/incoming neighbour groups (each group shows only when the current direction includes it — outgoing hidden in `up`, incoming hidden in `down`, both shown in `both`), and the `nodeMetrics` "trace direction" readout. The trace tree is unaffected — it is always outgoing, regardless of this control.
 - Labels toggle — pill. Labels: `labels on` / `labels off`. Default on.
+- `reset view` pill — resets pan/zoom to identity (see "Pan & zoom" below).
+- `info band` / `minimap` toggle pills — independently show/hide the corner tag and the minimap (see below). Default both on. Exists because on a dense layout either overlay can sit on top of graph content the user needs to see.
 - Spacer.
 - Compare-mode badge (compare only) — `1px solid #c67139`, `background:#fff2eb`, ink `--color-accent-700`. Copy: `⛓ synced pan · zoom · layer · selection`.
 - `trace tree` toggle — pill with overlay active state.
@@ -228,11 +230,12 @@ See the two-palette section for ground, grid, hairline, node and edge colour.
 - **Node shape**: from class; all become circles when shape encoding is off.
 - **Hop ring**: nodes at hop ≥ 2 get a second circle at `r + 3.5`, `fill:none`, stroke = class colour, 0.7px, `strokeOpacity: op × 0.9`. This keeps distant-but-reachable nodes findable once their fill has faded.
 - **Node opacity**: `decayAlpha[min(hop,3)] × (layerOpacity/100)`. Nodes outside the subgraph go to `0.1` (or are removed entirely in `filter` mode).
-- **Labels** (when labels are on): shown for the selected node, any node at hop ≤ 1, and **always** for `case` nodes. JetBrains Mono, 11px selected / 9px otherwise, `fill: #201e1d`, `fillOpacity: max(op, 0.55)`, `pointer-events:none`.
+- **Labels** (when labels are on): shown for the selected node, any node at hop ≤ 2, and **always** for `case` nodes. JetBrains Mono, 11px selected / 9px otherwise, `fill: #201e1d`, `fillOpacity: max(op, 0.55)`, `pointer-events:none`. (Raised from hop ≤ 1 to hop ≤ 2 — with the tripartite dataset, a 2-hop BFS from a MicroRNA node reaches its Pathways only at hop 2, and those were going unlabelled even though the hop-ring and edges already made them visually part of the subgraph.)
   Placement measures the string (mono advance ≈ 0.6em → `len × 6.6` selected, `× 5.4` otherwise) and draws right of the node by default; **flips to the left only if the flipped position also fits**, and both branches clamp inside the box (6px inset) so labels never run off either edge.
+  **NSM mode** (`Compare by` metric ≠ off) normally replaces this rule with "only NSM-marked nodes get a label," so a few hundred faded genes don't bury the handful that matter for the metric. But that rule must only take over when there is something to mark: guard it with `hasMarks = Object.keys(marks).length > 0` and fall back to the normal rule when `marks` is empty. Every current example dataset has no `*_descending`/`*_ascending` NSM columns at all, so without this guard every label on the canvas silently disappears the instant any metric is picked — the NSM rings never render either (no marks to draw), so the only visible symptom is "labels vanished," which is what makes this easy to miss.
 - Clicking a node selects it; clicking bare SVG background clears the selection.
-- **Corner tag** — top-left pill, `1px solid divider`, `background:#f9f4ed`, JetBrains Mono 400 10px, `--color-neutral-700`, ellipsised. Reads `L3 · clustered · 118 n · 190 e · focus highlight · 2 hop`; in compare mode prefixed `A · ` / `B · `.
-- **Minimap** — bottom-right, 104×68, `radius 6px`, `1px solid #c0b6a5`, `background:#f9f4ed`, containing a viewport rect, `1px solid #c67139`, `radius 3px`. Wired to the real pan/zoom transform: rect `left/top/width/height` are `-panX/k`, `-panY/k`, `100/k`, `100/k` percent of the canvas box. `overflow:hidden` on the minimap crops the rect when panned/zoomed past the edge rather than letting it escape the box.
+- **Corner tag** — top-left pill, `1px solid divider`, `background:#f9f4ed`, JetBrains Mono 400 10px, `--color-neutral-700`, ellipsised. Reads `L3 · clustered · 118 n · 190 e · focus highlight · 2 hop`; in compare mode prefixed `A · ` / `B · `. Hideable via the `info band` toolbar pill — it can sit on top of nodes near the top-left corner on a dense layout.
+- **Minimap** — bottom-right, 104×68, `radius 6px`, `1px solid #c0b6a5`, `background:#f9f4ed`, containing a viewport rect, `1px solid #c67139`, `radius 3px`. Wired to the real pan/zoom transform: rect `left/top/width/height` are `-panX/k`, `-panY/k`, `100/k`, `100/k` percent of the canvas box. `overflow:hidden` on the minimap crops the rect when panned/zoomed past the edge rather than letting it escape the box. Hideable via the `minimap` toolbar pill, independently of the corner tag — same rationale.
 
 - **Pan & zoom** — implemented. Mouse wheel zooms anchored on the pointer (clamped `0.5×`–`8×`); click-drag pans. Both live as a single `{x, y, k}` transform applied via an SVG `<g transform="translate(x,y) scale(k)">` wrapping the edges/nodes/labels, so labels and stroke widths scale with content (standard SVG behaviour — no `vector-effect` correction applied). A `reset view` toolbar pill resets the transform to identity. In compare mode the transform is a single shared value driving both canvases — this is what makes the existing "synced pan · zoom" compare-badge copy true rather than aspirational.
 
@@ -246,9 +249,26 @@ Decay curves (opacity by hop 0..3), selectable via tweak:
 | standard (default) | 1 | 1 | 0.55 | 0.28 |
 | steep | 1 | 0.85 | 0.35 | 0.12 |
 
-**Compare mode** renders two canvases side by side from two different seeds,
-split by a 1px divider, each at half width. Selection, active layer, class
-filters and focus settings are shared across both.
+**Compare mode** renders two canvases side by side, one per dataset, split by
+a 1px divider, each at half width. Selection, active layer, class filters and
+focus settings are shared across both. Side A is `activeDataset` (the top-bar
+dataset seg); side B is `compareDataset`, chosen from a `vs` select next to
+the seg (visible only in Compare mode) — see §9 for why a separate B picker
+exists now that there are five candidate datasets instead of two.
+
+**Unmatched selection.** The shared `selected` id is looked up independently
+in each dataset — see §9's `matchLabel`/Alignment-tab description. When that
+id exists in one dataset but not the other, the side where it's absent must
+render as "nothing in the subgraph," not as "nothing selected." Concretely:
+the per-side dim/filter decision (`focus:none` → full opacity, `filter` →
+remove non-subgraph nodes, otherwise → dim to `0.1`) must key off the
+**global** `this.selected`, not that side's own resolved `v.sel` — `v.sel` is
+`null` in both "nothing is selected anywhere" and "something is selected but
+not on this side," and those two cases need opposite treatment. Getting this
+wrong reads as: select a node on side A that has no counterpart on side B, and
+side B lights up at full brightness as if focus were off, instead of dimming
+(or, under `filter`, emptying) like every other "not part of the current
+subgraph" case in the app already does.
 
 ### 5. Centre — trace tree pane
 
@@ -321,7 +341,7 @@ clickable → select. Unmatched B shows `—` and Δ shows `A only`.
 - **Clear selection** — click bare canvas. Tree root is retained.
 - **Focus modes** — `none`: no decay, everything at full opacity. `highlight`: subgraph at decay alpha, everything else at 0.1. `filter`: non-subgraph nodes and edges are removed from the DOM entirely.
 - **Hops** — 1/2/3, sets BFS depth.
-- **Direction** — `downstream` follows outgoing edges only; `both` follows in and out. Affects BFS, the inspector's incoming group, and nothing else (the tree is always outgoing).
+- **Direction** — `down` follows outgoing edges only; `up` follows incoming edges only; `both` follows both. Affects BFS, which of the inspector's outgoing/incoming groups render, and nothing else (the tree is always outgoing).
 - **Class toggle** — removes that class from the view; layer counts, node counts and edges recompute.
 - **Layer visibility / opacity / active** — active layer sets the ceiling: nodes and edges with `layer > active` are excluded. Per-layer opacity multiplies into node and edge alpha.
 - **Tree expand/collapse** — per-row toggles stored by path key; expand/collapse-all resets toggles and moves the base depth.
@@ -376,6 +396,29 @@ threshold filter**, styled as a new rail section following the existing
   same `null`-follows-default idiom used elsewhere in the state (see
   `railOpen`/`treeShown`).
 
+### 9. Five example datasets, and a second selector for Compare mode's B side
+
+The repo ships five real breast-cancer-subtype snapshots under `examples/`:
+`normal`, `basal-like`, `her2-enriched`, `luminal-a`, `luminal-b` — all five
+loaded up front in `mounted()`, not just the luminal pair. The top-bar dataset
+`seg` shows all five, labelled with the short display names above (`basal` for
+`basal-like`, `her2` for `her2-enriched`, the rest unchanged) via a
+`DATASET_LABELS` lookup — the dataset **key** stays the full prefix, because
+it doubles as the `examples/<key>_{nodes,edges}.csv` filename; only the button
+copy is shortened.
+
+With exactly two datasets, Compare mode's second canvas could just be "the
+other one." With five, "the other one" is ambiguous, so Compare mode needs its
+own second selector: a `compareDataset` state field, exposed as a `vs` select
+(styled as `.nsm-select`, same control already used for the NSM metric
+picker) next to the main dataset seg, shown only when `isCompare`. The
+invariant `activeDataset !== compareDataset` is maintained by swapping rather
+than blocking: picking a dataset that's already the other side swaps A and B
+instead of colliding or silently no-op'ing. Only changing `activeDataset`
+resets selection/tree/q-threshold state (see `setDataset`) — changing
+`compareDataset` alone leaves those alone, since the shared `selected` id is
+still meaningfully looked up against the (unchanged) side-A dataset.
+
 ## State management
 
 ```
@@ -389,7 +432,7 @@ selected: nodeId | null
 treeRoot: nodeId | null
 focus: 'none' | 'highlight' | 'filter'
 hop: 1 | 2 | 3
-dir: 'down' | 'both'
+dir: 'down' | 'up' | 'both'
 labels: boolean
 tree: boolean | null                  // null = follow the treePane default
 open: Record<pathKey, boolean>        // tree row overrides
@@ -399,6 +442,8 @@ colW, paneH: number                   // measured column box — see layout cons
 qThreshold: number | null             // null = follow the dataset's min (unfiltered) — see §8
 hideOrphanMrna: boolean               // default false — see §8
 viewTransform: { x, y, k }            // pan/zoom, shared across compare-mode canvases — see §4
+activeDataset, compareDataset: string // dataset keys, kept distinct — see §9
+cornerTagShown, minimapShown: boolean // default true — independent overlay toggles, see §4
 ```
 
 Derived per render, not stored: the filtered view (nodes, edges, adjacency,
