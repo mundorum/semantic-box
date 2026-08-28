@@ -94,6 +94,23 @@
               <span>[[ h.label ]]</span>
             </div>
           </div>
+
+          <div class="q-legend">
+            <div class="q-legend__title">Pathway q-value</div>
+            <div class="q-legend__row">
+              <span class="q-legend__bound">[[ qRangeRender.minLabel ]]</span>
+              <input type="range" class="q-slider" :min="qRange.min" :max="qRange.max" :step="qStep"
+                     :value="effectiveQThreshold" title="show only mRNA · pathway connections with q ≥ this value"
+                     @input="setQThreshold($event.target.value)">
+              <span class="q-legend__bound">[[ qRangeRender.maxLabel ]]</span>
+            </div>
+            <div class="q-legend__value">q ≥ [[ qRangeRender.currentLabel ]] · [[ qRangeRender.pathwayCount ]] pathways shown</div>
+            <button class="toolbar-pill q-orphan-toggle" @click="toggleHideOrphanMrna"
+                    title="mRNAs whose pathway connections were all filtered out by the q-value slider">
+              <span class="pill__active-overlay" v-if="hideOrphanMrna"></span>
+              <span class="pill__label">[[ hideOrphanMrna ? 'hide orphaned mRNA' : 'show orphaned mRNA' ]]</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -115,6 +132,7 @@
 
           <button class="toolbar-pill" @click="toggleDir">[[ dir === 'both' ? '⇄ both directions' : '→ downstream only' ]]</button>
           <button class="toolbar-pill" @click="toggleLabels">[[ labels ? 'labels on' : 'labels off' ]]</button>
+          <button class="toolbar-pill" @click="resetView" title="reset pan and zoom">reset view</button>
 
           <span class="toolbar__label">Compare by</span>
           <select class="nsm-select" :value="nsmMetric" @change="setNsmMetric($event.target.value)">
@@ -137,41 +155,9 @@
         </div>
 
         <div class="center-body" :ref="setCanvasWrap">
-          <div class="canvas" v-if="!isCompare">
+          <div class="canvas" v-if="!isCompare" @wheel.prevent="onWheel" @pointerdown="onPointerDown">
             <svg :viewBox="'0 0 ' + canvasWidth + ' ' + canvasHeight" preserveAspectRatio="xMidYMid slice" @click="svgClick">
-              <line v-for="e in edgesRender" :key="e.key"
-                    :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2"
-                    :stroke="e.stroke" :stroke-width="e.strokeWidth" :stroke-opacity="e.strokeOpacity" />
-              <template v-for="n in nodesRender" :key="n.id">
-                <rect v-if="n.shape === 'box'"
-                      :x="n.cx - n.r" :y="n.cy - n.r" :width="n.r * 2" :height="n.r * 2" rx="2"
-                      :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
-                      style="cursor:pointer" @click="select(n.id)" />
-                <polygon v-else-if="n.shape === 'diamond'"
-                      :points="diamondPoints(n)"
-                      :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
-                      style="cursor:pointer" @click="select(n.id)" />
-                <circle v-else
-                      :cx="n.cx" :cy="n.cy" :r="n.r"
-                      :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
-                      style="cursor:pointer" @click="select(n.id)" />
-                <circle v-if="n.hopRing" :cx="n.cx" :cy="n.cy" :r="n.ringR" fill="none"
-                      :stroke="n.ringColor" stroke-width="0.7" :stroke-opacity="n.ringOpacity" style="pointer-events:none" />
-                <circle v-if="n.nsmRing" :cx="n.cx" :cy="n.cy" :r="n.ringNsmR" fill="none"
-                      :stroke="n.ringNsmColor" :stroke-width="n.ringNsmWidth" :stroke-opacity="n.ringNsmOpacity" style="pointer-events:none" />
-                <text v-if="n.showLabel" :x="n.labelX" :y="n.labelY" :text-anchor="n.labelAnchor" :font-size="n.labelSize"
-                      font-family="'JetBrains Mono',monospace" fill="#201e1d" :fill-opacity="n.labelOpacity" style="pointer-events:none">[[ n.id ]]</text>
-              </template>
-            </svg>
-            <span class="canvas-tag">[[ cornerTag ]]</span>
-            <div class="minimap"><div class="minimap__viewport"></div></div>
-          </div>
-
-          <!-- compare mode: two canvases side by side, split by a divider, sharing
-               selection/focus/hop/layer state — see js/app.js viewB / computeEdgesFor -->
-          <template v-else>
-            <div class="canvas canvas--divided">
-              <svg :viewBox="'0 0 ' + canvasWidth + ' ' + canvasHeight" preserveAspectRatio="xMidYMid slice" @click="svgClick">
+              <g :transform="'translate(' + viewTransform.x + ',' + viewTransform.y + ') scale(' + viewTransform.k + ')'">
                 <line v-for="e in edgesRender" :key="e.key"
                       :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2"
                       :stroke="e.stroke" :stroke-width="e.strokeWidth" :stroke-opacity="e.strokeOpacity" />
@@ -179,54 +165,92 @@
                   <rect v-if="n.shape === 'box'"
                         :x="n.cx - n.r" :y="n.cy - n.r" :width="n.r * 2" :height="n.r * 2" rx="2"
                         :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
-                        style="cursor:pointer" @click="select(n.id)" />
+                        style="cursor:pointer" @click="nodeClick(n.id)" />
                   <polygon v-else-if="n.shape === 'diamond'"
                         :points="diamondPoints(n)"
                         :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
-                        style="cursor:pointer" @click="select(n.id)" />
+                        style="cursor:pointer" @click="nodeClick(n.id)" />
                   <circle v-else
                         :cx="n.cx" :cy="n.cy" :r="n.r"
                         :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
-                        style="cursor:pointer" @click="select(n.id)" />
+                        style="cursor:pointer" @click="nodeClick(n.id)" />
                   <circle v-if="n.hopRing" :cx="n.cx" :cy="n.cy" :r="n.ringR" fill="none"
                         :stroke="n.ringColor" stroke-width="0.7" :stroke-opacity="n.ringOpacity" style="pointer-events:none" />
                   <circle v-if="n.nsmRing" :cx="n.cx" :cy="n.cy" :r="n.ringNsmR" fill="none"
                         :stroke="n.ringNsmColor" :stroke-width="n.ringNsmWidth" :stroke-opacity="n.ringNsmOpacity" style="pointer-events:none" />
                   <text v-if="n.showLabel" :x="n.labelX" :y="n.labelY" :text-anchor="n.labelAnchor" :font-size="n.labelSize"
-                        font-family="'JetBrains Mono',monospace" fill="#201e1d" :fill-opacity="n.labelOpacity" style="pointer-events:none">[[ n.id ]]</text>
+                        font-family="'JetBrains Mono',monospace" fill="#201e1d" :fill-opacity="n.labelOpacity" style="pointer-events:none">[[ n.label ]]</text>
                 </template>
+              </g>
+            </svg>
+            <span class="canvas-tag">[[ cornerTag ]]</span>
+            <div class="minimap"><div class="minimap__viewport" :style="minimapViewportStyle"></div></div>
+          </div>
+
+          <!-- compare mode: two canvases side by side, split by a divider, sharing
+               selection/focus/hop/layer state — see js/app.js viewB / computeEdgesFor -->
+          <template v-else>
+            <div class="canvas canvas--divided" @wheel.prevent="onWheel" @pointerdown="onPointerDown">
+              <svg :viewBox="'0 0 ' + canvasWidth + ' ' + canvasHeight" preserveAspectRatio="xMidYMid slice" @click="svgClick">
+                <g :transform="'translate(' + viewTransform.x + ',' + viewTransform.y + ') scale(' + viewTransform.k + ')'">
+                  <line v-for="e in edgesRender" :key="e.key"
+                        :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2"
+                        :stroke="e.stroke" :stroke-width="e.strokeWidth" :stroke-opacity="e.strokeOpacity" />
+                  <template v-for="n in nodesRender" :key="n.id">
+                    <rect v-if="n.shape === 'box'"
+                          :x="n.cx - n.r" :y="n.cy - n.r" :width="n.r * 2" :height="n.r * 2" rx="2"
+                          :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
+                          style="cursor:pointer" @click="nodeClick(n.id)" />
+                    <polygon v-else-if="n.shape === 'diamond'"
+                          :points="diamondPoints(n)"
+                          :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
+                          style="cursor:pointer" @click="nodeClick(n.id)" />
+                    <circle v-else
+                          :cx="n.cx" :cy="n.cy" :r="n.r"
+                          :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
+                          style="cursor:pointer" @click="nodeClick(n.id)" />
+                    <circle v-if="n.hopRing" :cx="n.cx" :cy="n.cy" :r="n.ringR" fill="none"
+                          :stroke="n.ringColor" stroke-width="0.7" :stroke-opacity="n.ringOpacity" style="pointer-events:none" />
+                    <circle v-if="n.nsmRing" :cx="n.cx" :cy="n.cy" :r="n.ringNsmR" fill="none"
+                          :stroke="n.ringNsmColor" :stroke-width="n.ringNsmWidth" :stroke-opacity="n.ringNsmOpacity" style="pointer-events:none" />
+                    <text v-if="n.showLabel" :x="n.labelX" :y="n.labelY" :text-anchor="n.labelAnchor" :font-size="n.labelSize"
+                          font-family="'JetBrains Mono',monospace" fill="#201e1d" :fill-opacity="n.labelOpacity" style="pointer-events:none">[[ n.label ]]</text>
+                  </template>
+                </g>
               </svg>
               <span class="canvas-tag">A · [[ cornerTag ]]</span>
-              <div class="minimap"><div class="minimap__viewport"></div></div>
+              <div class="minimap"><div class="minimap__viewport" :style="minimapViewportStyle"></div></div>
             </div>
-            <div class="canvas">
+            <div class="canvas" @wheel.prevent="onWheel" @pointerdown="onPointerDown">
               <svg :viewBox="'0 0 ' + canvasWidth + ' ' + canvasHeight" preserveAspectRatio="xMidYMid slice" @click="svgClick">
-                <line v-for="e in edgesRenderB" :key="e.key"
-                      :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2"
-                      :stroke="e.stroke" :stroke-width="e.strokeWidth" :stroke-opacity="e.strokeOpacity" />
-                <template v-for="n in nodesRenderB" :key="n.id">
-                  <rect v-if="n.shape === 'box'"
-                        :x="n.cx - n.r" :y="n.cy - n.r" :width="n.r * 2" :height="n.r * 2" rx="2"
-                        :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
-                        style="cursor:pointer" @click="select(n.id)" />
-                  <polygon v-else-if="n.shape === 'diamond'"
-                        :points="diamondPoints(n)"
-                        :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
-                        style="cursor:pointer" @click="select(n.id)" />
-                  <circle v-else
-                        :cx="n.cx" :cy="n.cy" :r="n.r"
-                        :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
-                        style="cursor:pointer" @click="select(n.id)" />
-                  <circle v-if="n.hopRing" :cx="n.cx" :cy="n.cy" :r="n.ringR" fill="none"
-                        :stroke="n.ringColor" stroke-width="0.7" :stroke-opacity="n.ringOpacity" style="pointer-events:none" />
-                  <circle v-if="n.nsmRing" :cx="n.cx" :cy="n.cy" :r="n.ringNsmR" fill="none"
-                        :stroke="n.ringNsmColor" :stroke-width="n.ringNsmWidth" :stroke-opacity="n.ringNsmOpacity" style="pointer-events:none" />
-                  <text v-if="n.showLabel" :x="n.labelX" :y="n.labelY" :text-anchor="n.labelAnchor" :font-size="n.labelSize"
-                        font-family="'JetBrains Mono',monospace" fill="#201e1d" :fill-opacity="n.labelOpacity" style="pointer-events:none">[[ n.id ]]</text>
-                </template>
+                <g :transform="'translate(' + viewTransform.x + ',' + viewTransform.y + ') scale(' + viewTransform.k + ')'">
+                  <line v-for="e in edgesRenderB" :key="e.key"
+                        :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2"
+                        :stroke="e.stroke" :stroke-width="e.strokeWidth" :stroke-opacity="e.strokeOpacity" />
+                  <template v-for="n in nodesRenderB" :key="n.id">
+                    <rect v-if="n.shape === 'box'"
+                          :x="n.cx - n.r" :y="n.cy - n.r" :width="n.r * 2" :height="n.r * 2" rx="2"
+                          :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
+                          style="cursor:pointer" @click="nodeClick(n.id)" />
+                    <polygon v-else-if="n.shape === 'diamond'"
+                          :points="diamondPoints(n)"
+                          :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
+                          style="cursor:pointer" @click="nodeClick(n.id)" />
+                    <circle v-else
+                          :cx="n.cx" :cy="n.cy" :r="n.r"
+                          :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
+                          style="cursor:pointer" @click="nodeClick(n.id)" />
+                    <circle v-if="n.hopRing" :cx="n.cx" :cy="n.cy" :r="n.ringR" fill="none"
+                          :stroke="n.ringColor" stroke-width="0.7" :stroke-opacity="n.ringOpacity" style="pointer-events:none" />
+                    <circle v-if="n.nsmRing" :cx="n.cx" :cy="n.cy" :r="n.ringNsmR" fill="none"
+                          :stroke="n.ringNsmColor" :stroke-width="n.ringNsmWidth" :stroke-opacity="n.ringNsmOpacity" style="pointer-events:none" />
+                    <text v-if="n.showLabel" :x="n.labelX" :y="n.labelY" :text-anchor="n.labelAnchor" :font-size="n.labelSize"
+                          font-family="'JetBrains Mono',monospace" fill="#201e1d" :fill-opacity="n.labelOpacity" style="pointer-events:none">[[ n.label ]]</text>
+                  </template>
+                </g>
               </svg>
               <span class="canvas-tag">B · [[ cornerTagB ]]</span>
-              <div class="minimap"><div class="minimap__viewport"></div></div>
+              <div class="minimap"><div class="minimap__viewport" :style="minimapViewportStyle"></div></div>
             </div>
           </template>
 
@@ -247,7 +271,7 @@
                   <span v-else-if="row.shape === 'box'" class="tree-glyph-box" :style="{ background: row.color }"></span>
                   <span v-else class="tree-glyph-diamond" :style="{ background: row.color }"></span>
                 </span>
-                <span class="tree-row__id">[[ row.id ]]</span>
+                <span class="tree-row__id">[[ row.label ]]</span>
                 <span class="tree-row__rel">[[ row.rel ]]</span>
               </div>
             </div>
@@ -273,7 +297,7 @@
                 <span v-else-if="selClass.shape === 'box'" class="node-glyph-box" :style="{ background: selClass.color }"></span>
                 <span v-else class="node-glyph-diamond" :style="{ background: selClass.color }"></span>
               </span>
-              <span class="node-tab__id">[[ selNode ? selNode.id : 'nothing selected' ]]</span>
+              <span class="node-tab__id">[[ selNode ? selNode.label : 'nothing selected' ]]</span>
               <span class="node-tab__class-pill" v-if="selNode">[[ selNode.cls ]]</span>
             </div>
 
@@ -303,7 +327,7 @@
               <div class="neighbour-rows">
                 <div class="neighbour-row" v-for="r in g.rows" :key="r.id" @click="select(r.id)">
                   <span class="neighbour-row__dot" :style="{ background: r.color }"></span>
-                  <span class="neighbour-row__id">[[ r.id ]]</span>
+                  <span class="neighbour-row__id">[[ r.label ]]</span>
                   <span class="neighbour-row__bar"><span class="neighbour-row__bar-fill" :style="{ width: r.pct }"></span></span>
                   <span class="neighbour-row__w">[[ r.w ]]</span>
                 </div>
@@ -335,7 +359,7 @@
             <table class="align-table">
               <thead><tr><th class="marker-col"></th><th>A</th><th>B</th><th class="num">reach A/B</th><th class="num">Δ</th></tr></thead>
               <tbody>
-                <tr v-for="row in alignmentRows" :key="row.a" @click="select(row.a)">
+                <tr v-for="row in alignmentRows" :key="row.id" @click="select(row.id)">
                   <td class="marker-col"><span class="align-marker" v-if="row.selected"></span></td>
                   <td>[[ row.a ]]</td><td>[[ row.b ]]</td><td class="num">[[ row.deg ]]</td><td class="num">[[ row.delta ]]</td>
                 </tr>

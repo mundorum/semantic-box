@@ -232,7 +232,11 @@ See the two-palette section for ground, grid, hairline, node and edge colour.
   Placement measures the string (mono advance ≈ 0.6em → `len × 6.6` selected, `× 5.4` otherwise) and draws right of the node by default; **flips to the left only if the flipped position also fits**, and both branches clamp inside the box (6px inset) so labels never run off either edge.
 - Clicking a node selects it; clicking bare SVG background clears the selection.
 - **Corner tag** — top-left pill, `1px solid divider`, `background:#f9f4ed`, JetBrains Mono 400 10px, `--color-neutral-700`, ellipsised. Reads `L3 · clustered · 118 n · 190 e · focus highlight · 2 hop`; in compare mode prefixed `A · ` / `B · `.
-- **Minimap** — bottom-right, 104×68, `radius 6px`, `1px solid #c0b6a5`, `background:#f9f4ed`, containing a viewport rect at `left:22% top:20% width:44% height:52%`, `1px solid #c67139`, `radius 3px`. **Decorative in the prototype** — wire it to real viewport state.
+- **Minimap** — bottom-right, 104×68, `radius 6px`, `1px solid #c0b6a5`, `background:#f9f4ed`, containing a viewport rect, `1px solid #c67139`, `radius 3px`. Wired to the real pan/zoom transform: rect `left/top/width/height` are `-panX/k`, `-panY/k`, `100/k`, `100/k` percent of the canvas box. `overflow:hidden` on the minimap crops the rect when panned/zoomed past the edge rather than letting it escape the box.
+
+- **Pan & zoom** — implemented. Mouse wheel zooms anchored on the pointer (clamped `0.5×`–`8×`); click-drag pans. Both live as a single `{x, y, k}` transform applied via an SVG `<g transform="translate(x,y) scale(k)">` wrapping the edges/nodes/labels, so labels and stroke widths scale with content (standard SVG behaviour — no `vector-effect` correction applied). A `reset view` toolbar pill resets the transform to identity. In compare mode the transform is a single shared value driving both canvases — this is what makes the existing "synced pan · zoom" compare-badge copy true rather than aspirational.
+
+  **Do not use `setPointerCapture` on the pan-handling element.** Per the Pointer Events spec, capturing a pointer retargets its subsequent *compatibility mouse events* — including `click` — to the capturing element too. Since node selection relies on a `@click` bound directly to each node's own SVG shape, capturing on the wrapping `.canvas` div silently swallows every node click once a drag has been armed (pointerdown always arms it, even for a plain click). Track the drag via `window`-level `pointermove`/`pointerup` listeners added on `pointerdown` and removed on `pointerup` instead — this keeps tracking the pointer outside the element's bounds without touching event targeting. Disambiguate a pan from a click with a small movement threshold (~3px in canvas units) recorded on a `_dragMoved` flag, checked by both the node click handler and the background-click handler (`svgClick`) — a background click also must not fire immediately after a pan that happens to release over empty canvas.
 
 Decay curves (opacity by hop 0..3), selectable via tweak:
 
@@ -326,7 +330,51 @@ clickable → select. Unmatched B shows `—` and Δ shows `A only`.
 - **Focus-visible** must be `2px solid var(--color-accent)` with `2px` offset per the Organic system — the prototype relies on the design system's stylesheet for this; ensure your implementation keeps it.
 
 **Not implemented in the prototype** (design intent exists, behaviour doesn't):
-search/jump, "build a layer over top", canvas pan/zoom, and the minimap viewport.
+search/jump and "build a layer over top". (Canvas pan/zoom and the minimap
+viewport *are* implemented in the production build — see "Pan & zoom" above.)
+
+### 7. Node identity: id vs. label
+
+Every node carries both an `id` (a stable key — gene symbol, KEGG id like
+`KEGG:04510`, miRNA accession) and a `label` (a human-readable name — for most
+classes these are identical, but Pathway nodes have a real display name, e.g.
+`Focal adhesion`). **Every place a node's identity is shown to the user must
+render `label`, never `id`** — canvas text, tree rows, neighbour rows, the
+node inspector title, the alignment table. `id` stays the internal key for
+selection, BFS, edge endpoints, Vue `:key`, and the trace-tree path set — it
+never appears in copy. Because `label === id` for MicroRNA and Messenger RNA
+in the current dataset, this rule is invisible for those two classes and only
+changes what Pathway nodes look like; keep it generic (render `label` with an
+`id` fallback) rather than special-casing the Pathway class, so it holds for
+any future class whose id and display name diverge.
+
+### 8. Pathway q-value filter (real-data addition, not in the original prototype)
+
+The reference prototype's synthetic model has no concept of statistical
+significance on an edge. The real tripartite dataset does: every Messenger
+RNA → Pathway edge carries a q-value (MicroRNA → Messenger RNA edges do not —
+they carry a correlation instead). The production build adds a **q-value
+threshold filter**, styled as a new rail section following the existing
+`hop-legend` pattern (title + control, in `.rail-bottom`, top divider):
+
+- A native `input[type=range]` spanning the dataset's actual observed
+  min→max q-value (not a fixed 0–1 range), `accent-color: var(--color-accent)`
+  matching every other slider in the app (see the layer-card opacity slider).
+  Reads "q ≥ &lt;value&gt; · N pathways shown" beneath it.
+- **Semantics**: an edge survives when `edge.qvalue >= threshold`. A Pathway
+  with zero surviving edges is removed from the view entirely — not dimmed,
+  not just edge-less — same "hide, don't fade" treatment `filter` focus mode
+  already gives non-subgraph nodes.
+- **Orphaned Messenger RNA toggle** — a Messenger RNA that loses every Pathway
+  edge to the q-value filter (regardless of whether it still carries a
+  MicroRNA edge) is an "orphan." A `toolbar-pill` immediately below the
+  slider, using the same overlay-active idiom as every other toggle pill in
+  this app, switches between showing and hiding orphans. Default is **show**
+  (`hideOrphanMrna: false`) — the q-value filter should not silently prune
+  more of the graph than the user explicitly asked for until they opt in.
+- Resets to the dataset's own minimum (i.e. unfiltered) on dataset switch,
+  same `null`-follows-default idiom used elsewhere in the state (see
+  `railOpen`/`treeShown`).
 
 ## State management
 
@@ -348,6 +396,9 @@ open: Record<pathKey, boolean>        // tree row overrides
 baseDepth: number                     // default-open depth
 query: string                         // search box (unwired)
 colW, paneH: number                   // measured column box — see layout constraint
+qThreshold: number | null             // null = follow the dataset's min (unfiltered) — see §8
+hideOrphanMrna: boolean               // default false — see §8
+viewTransform: { x, y, k }            // pan/zoom, shared across compare-mode canvases — see §4
 ```
 
 Derived per render, not stored: the filtered view (nodes, edges, adjacency,

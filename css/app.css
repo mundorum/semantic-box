@@ -264,6 +264,26 @@ body {
 }
 .hop-bar { width: 26px; height: 3px; border-radius: 999px; background: var(--color-accent); }
 
+.q-legend {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-divider);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.q-legend__title {
+  font: 500 10px/1 var(--font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-neutral-600);
+}
+.q-legend__row { display: flex; align-items: center; gap: 7px; }
+.q-legend__bound { flex: none; font: 400 9px/1 var(--font-mono); color: var(--color-neutral-600); }
+.q-slider { flex: 1; min-width: 0; accent-color: var(--color-accent); height: 14px; margin: 0; }
+.q-legend__value { font: 400 10px/1.3 var(--font-mono); color: var(--color-neutral-700); }
+.q-orphan-toggle { align-self: flex-start; padding: 6px 11px; }
+
 .section-label {
   font: 500 10px/1 var(--font-mono);
   letter-spacing: .08em;
@@ -362,7 +382,10 @@ body {
   background-image: radial-gradient(var(--canvas-grid-ink) 1px, transparent 1px);
   background-size: 18px 18px;
   box-shadow: inset 0 0 0 1px rgba(32, 30, 29, .10);
+  cursor: grab;
+  touch-action: none;
 }
+.canvas:active { cursor: grabbing; }
 .canvas--divided { border-right: 1px solid var(--color-divider); }
 .canvas svg {
   position: absolute;
@@ -394,6 +417,7 @@ body {
   border-radius: 6px;
   border: 1px solid var(--color-neutral-400);
   background: var(--color-neutral-100);
+  overflow: hidden;
 }
 .minimap__viewport {
   position: absolute;

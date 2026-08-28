@@ -78,10 +78,45 @@ function computeNsmMarks(metricKey, state, nodesA, nodesB, otherKeyA, otherKeyB)
 // graph model under the current UI state.
 function computeView(model, state) {
   const onNode = n => state.cls[n.cls] && n.layer <= state.active && state.vis[n.layer];
-  const nodes = model.nodes.filter(onNode);
-  const live = {};
+  let nodes = model.nodes.filter(onNode);
+  let live = {};
   nodes.forEach(n => { live[n.id] = n; });
-  const edges = model.edges.filter(e => live[e.s] && live[e.t] && e.layer <= state.active);
+  let edges = model.edges.filter(e => live[e.s] && live[e.t] && e.layer <= state.active);
+
+  // q-value filter: a Messenger RNA -> Pathway edge survives only when its
+  // q-value is >= the slider threshold. Edges with no q-value (MicroRNA ->
+  // Messenger RNA) are never affected by this filter.
+  const qThreshold = state.qThreshold ?? -Infinity;
+  edges = edges.filter(e => e.qvalue === null || e.qvalue === undefined || e.qvalue >= qThreshold);
+
+  // A Pathway with no surviving edge is hidden entirely — not just dimmed.
+  const pathwayHasEdge = {};
+  edges.forEach(e => {
+    if (live[e.s] && live[e.s].cls === 'Pathway') pathwayHasEdge[e.s] = true;
+    if (live[e.t] && live[e.t].cls === 'Pathway') pathwayHasEdge[e.t] = true;
+  });
+  nodes = nodes.filter(n => n.cls !== 'Pathway' || pathwayHasEdge[n.id]);
+  live = {};
+  nodes.forEach(n => { live[n.id] = n; });
+  edges = edges.filter(e => live[e.s] && live[e.t]);
+
+  // Messenger RNAs that lost every Pathway connection to the q-value filter
+  // ("orphaned") can optionally be hidden too, independent of whether they
+  // still carry MicroRNA edges — see the "show/hide orphaned mRNA" toggle.
+  if (state.hideOrphanMrna) {
+    const mrnaHasPathwayEdge = {};
+    edges.forEach(e => {
+      const a = live[e.s], b = live[e.t];
+      if (!a || !b) return;
+      if (a.cls === 'Messenger RNA' && b.cls === 'Pathway') mrnaHasPathwayEdge[a.id] = true;
+      if (b.cls === 'Messenger RNA' && a.cls === 'Pathway') mrnaHasPathwayEdge[b.id] = true;
+    });
+    nodes = nodes.filter(n => n.cls !== 'Messenger RNA' || mrnaHasPathwayEdge[n.id]);
+    live = {};
+    nodes.forEach(n => { live[n.id] = n; });
+    edges = edges.filter(e => live[e.s] && live[e.t]);
+  }
+
   const out = {}, inn = {}, deg = {};
   edges.forEach(e => {
     (out[e.s] = out[e.s] || []).push(e);

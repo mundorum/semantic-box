@@ -78,7 +78,11 @@ async function loadDataset(prefix) {
     const w = hasCorr
       ? Math.max(0.05, Math.min(1, Math.abs(parseFloat(r.correlation))))
       : Math.max(0.05, Math.min(1, 1 - (parseFloat(r.qvalue) || 0)));
-    edges.push({ s: r.source, t: r.target, rel: hasCorr ? 'regulates' : 'in_pathway', w, layer: 0 });
+    // Raw q-value is kept (not just folded into `w`) so the UI can offer a
+    // direct q-value threshold filter on Messenger RNA -> Pathway edges.
+    // null for MicroRNA -> Messenger RNA edges, which carry no q-value.
+    const qvalue = hasCorr ? null : (r.qvalue === '' || r.qvalue === undefined ? null : parseFloat(r.qvalue));
+    edges.push({ s: r.source, t: r.target, rel: hasCorr ? 'regulates' : 'in_pathway', w, qvalue, layer: 0 });
   });
 
   computeLayeredLayout(nodes, edges);

@@ -51,6 +51,20 @@ createApp({
       dir: 'down',                // 'down' | 'both'
       labels: true,
 
+      // Messenger RNA -> Pathway q-value filter. null = follow the current
+      // dataset's minimum (i.e. no filtering) — same null-follows-default
+      // idiom as railOpen/inspectorOpen. Reset to null on dataset switch so
+      // the slider re-defaults to the new dataset's own q-value range.
+      qThreshold: null,
+      // When true, Messenger RNAs left with zero surviving Pathway edges by
+      // the q-value filter are hidden entirely rather than just losing their
+      // dangling edges.
+      hideOrphanMrna: false,
+
+      // Canvas pan/zoom. Shared by both canvases in compare mode — matches
+      // the "synced pan · zoom" claim already made by the compare-mode badge.
+      viewTransform: { x: 0, y: 0, k: 1 },
+
       // Trace tree — a DFS path tree pinned to the selected node unless the
       // user has pinned it elsewhere (see select() for the pinning rule).
       treeRoot: null,
@@ -126,10 +140,40 @@ createApp({
       }];
     },
 
+    // Actual min/max q-value across this dataset's Messenger RNA -> Pathway
+    // edges — the slider's own range, recomputed whenever the dataset changes.
+    qRange() {
+      let min = Infinity, max = -Infinity;
+      this.model.edges.forEach(e => {
+        if (e.qvalue === null || e.qvalue === undefined || Number.isNaN(e.qvalue)) return;
+        if (e.qvalue < min) min = e.qvalue;
+        if (e.qvalue > max) max = e.qvalue;
+      });
+      if (!Number.isFinite(min)) { min = 0; max = 1; }
+      return { min, max };
+    },
+    qStep() {
+      const r = this.qRange;
+      return Math.max(1e-6, (r.max - r.min) / 200);
+    },
+    effectiveQThreshold() {
+      return this.qThreshold === null ? this.qRange.min : this.qThreshold;
+    },
+    qRangeRender() {
+      const r = this.qRange;
+      return {
+        minLabel: r.min.toFixed(3),
+        maxLabel: r.max.toFixed(3),
+        currentLabel: this.effectiveQThreshold.toFixed(3),
+        pathwayCount: this.view.nodes.filter(n => n.cls === 'Pathway').length,
+      };
+    },
+
     view() {
       return computeView(this.model, {
         selected: this.selected, hop: this.hop, dir: this.dir,
         active: this.active, vis: this.vis, cls: this.cls,
+        qThreshold: this.effectiveQThreshold, hideOrphanMrna: this.hideOrphanMrna,
       });
     },
 
@@ -191,7 +235,7 @@ createApp({
         const n = v.live[row.id];
         const c = CLASS_MAP[n ? n.cls : 'Messenger RNA'];
         return {
-          key: row.key, id: row.id,
+          key: row.key, id: row.id, label: n ? (n.label || row.id) : row.id,
           rel: row.rel || 'root',
           indent: (row.depth * 13) + 'px',
           caret: row.canExpand ? (row.isOpen ? '▾' : '▸') : '·',
@@ -211,6 +255,7 @@ createApp({
       return computeView(this.modelB, {
         selected: this.selected, hop: this.hop, dir: this.dir,
         active: this.active, vis: this.vis, cls: this.cls,
+        qThreshold: this.effectiveQThreshold, hideOrphanMrna: this.hideOrphanMrna,
       });
     },
 
@@ -294,7 +339,8 @@ createApp({
       if (!sel) return [];
       const alpha = DECAY[this.decayCurve];
       const rowsFor = list => list.slice(0, 6).map(({ id, w }) => ({
-        id, w: w.toFixed(2), pct: Math.round(w * 100) + '%',
+        id, label: v.live[id] ? (v.live[id].label || id) : id,
+        w: w.toFixed(2), pct: Math.round(w * 100) + '%',
         color: CLASS_MAP[v.live[id] ? v.live[id].cls : 'Messenger RNA'].color,
       }));
       const groups = [];
@@ -334,12 +380,25 @@ createApp({
         const inB = B && B.live[n.id];
         const dA = A.deg[n.id] || 0, dB = inB ? (B.deg[n.id] || 0) : null;
         return {
-          a: n.id, b: inB ? n.id : '—',
+          id: n.id, a: n.label || n.id, b: inB ? (inB.label || n.id) : '—',
           deg: dA + '/' + (inB ? dB : '—'),
           delta: inB ? ((dB - dA > 0 ? '+' : '') + (dB - dA)) : 'A only',
           selected: n.id === A.sel,
         };
       });
+    },
+
+    // Minimap viewport rect, in percentages of the full canvas — derived from
+    // the shared pan/zoom transform (see resetView/onWheel/onPointerMove).
+    minimapViewportStyle() {
+      const w = this.canvasWidth || 1, h = this.canvasHeight || 1;
+      const k = this.viewTransform.k || 1;
+      const leftPct = (-this.viewTransform.x / k) / w * 100;
+      const topPct = (-this.viewTransform.y / k) / h * 100;
+      return {
+        left: leftPct + '%', top: topPct + '%',
+        width: (100 / k) + '%', height: (100 / k) + '%',
+      };
     },
 
     edgesRender() { return this.computeEdgesFor(this.view); },
@@ -410,12 +469,13 @@ createApp({
         const showLabel = nsmActive
           ? (this.labels && !!mark)
           : (this.labels && (isSel || (sub && hop <= 1)));
-        const tw = String(n.id).length * (isSel ? 6.6 : 5.4);
+        const labelText = n.label || n.id;
+        const tw = String(labelText).length * (isSel ? 6.6 : 5.4);
         const flip = px + r + 4 + tw > W - 6 && px - r - 4 - tw > 6;
         const labelX = flip ? Math.max(px - r - 4, 6 + tw) : Math.min(px + r + 4, W - 6 - tw);
 
         out.push({
-          id: n.id, cls: n.cls, shape: c.shape,
+          id: n.id, label: labelText, cls: n.cls, shape: c.shape,
           cx: px, cy: py, r,
           fill: c.color, fillOpacity: op,
           stroke: isSel ? CANVAS_INK.selectStroke : CANVAS_INK.nodeHalo,
@@ -439,6 +499,7 @@ createApp({
       this.treeRoot = null;
       this.open = {};
       this.baseDepth = 2;
+      this.qThreshold = null;
     },
 
     // One-shot: mirrors the reference prototype's componentDidMount auto-
@@ -490,7 +551,73 @@ createApp({
         if (this.panel !== 'align') this.panel = 'node';
       }
     },
-    svgClick(e) { if (e.target.tagName === 'svg') this.select(null); },
+    // A node click that lands right after a pan drag is a drag artifact, not
+    // an intentional selection — see onPointerDown/onPointerMove.
+    nodeClick(id) { if (!this._dragMoved) this.select(id); },
+    svgClick(e) {
+      if (this._dragMoved) return;
+      if (e.target.tagName === 'svg') this.select(null);
+    },
+
+    setQThreshold(val) { this.qThreshold = parseFloat(val); },
+    toggleHideOrphanMrna() { this.hideOrphanMrna = !this.hideOrphanMrna; },
+
+    resetView() { this.viewTransform = { x: 0, y: 0, k: 1 }; },
+
+    // Pan/zoom: wheel zooms anchored on the pointer, drag pans. Both live on
+    // the wrapping `.canvas` div (not the svg) so native node/background
+    // clicks keep working undisturbed — see nodeClick/svgClick for the
+    // drag-vs-click disambiguation.
+    onWheel(e) {
+      const svg = e.currentTarget.querySelector('svg');
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      const scaleX = this.canvasWidth / rect.width;
+      const scaleY = this.canvasHeight / rect.height;
+      const px = (e.clientX - rect.left) * scaleX;
+      const py = (e.clientY - rect.top) * scaleY;
+      const t = this.viewTransform;
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      const k1 = Math.min(8, Math.max(0.5, t.k * factor));
+      const wx = (px - t.x) / t.k;
+      const wy = (py - t.y) / t.k;
+      this.viewTransform = { k: k1, x: px - wx * k1, y: py - wy * k1 };
+    },
+    // Deliberately NOT using setPointerCapture: per the Pointer Events spec,
+    // capturing an element retargets the subsequent compatibility mouse
+    // events — including `click` — to the capturing element too. Since nodes
+    // rely on their own per-shape @click to select, capturing on the
+    // wrapping .canvas div would silently swallow every node click. Window
+    // listeners give the same "keep tracking outside the div" behaviour
+    // without touching event targeting.
+    onPointerDown(e) {
+      const svg = e.currentTarget.querySelector('svg');
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      this._panStart = {
+        clientX: e.clientX, clientY: e.clientY,
+        tx: this.viewTransform.x, ty: this.viewTransform.y,
+        scaleX: this.canvasWidth / rect.width, scaleY: this.canvasHeight / rect.height,
+      };
+      this._dragMoved = false;
+      window.removeEventListener('pointermove', this.onWindowPointerMove);
+      window.removeEventListener('pointerup', this.onWindowPointerUp);
+      window.addEventListener('pointermove', this.onWindowPointerMove);
+      window.addEventListener('pointerup', this.onWindowPointerUp);
+    },
+    onWindowPointerMove(e) {
+      const start = this._panStart;
+      if (!start) return;
+      const dx = (e.clientX - start.clientX) * start.scaleX;
+      const dy = (e.clientY - start.clientY) * start.scaleY;
+      if (Math.abs(dx) + Math.abs(dy) > 3) this._dragMoved = true;
+      this.viewTransform = { k: this.viewTransform.k, x: start.tx + dx, y: start.ty + dy };
+    },
+    onWindowPointerUp() {
+      this._panStart = null;
+      window.removeEventListener('pointermove', this.onWindowPointerMove);
+      window.removeEventListener('pointerup', this.onWindowPointerUp);
+    },
 
     setFocus(mode) { this.focus = mode; },
     setHop(n) { this.hop = n; },
