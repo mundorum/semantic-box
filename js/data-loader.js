@@ -44,12 +44,9 @@ function parseNsmCell(raw) {
   return { state: inner[0], other: inner[1] || null, jaccard: inner[2] !== undefined ? inner[2] : null };
 }
 
-async function loadDataset(prefix) {
-  const [nodeRows, edgeRows] = await Promise.all([
-    fetchCSV('examples/' + prefix + '_nodes.csv'),
-    fetchCSV('examples/' + prefix + '_edges.csv'),
-  ]);
-
+// Shared by both the built-in fetch-based loader and the user-upload path
+// (loadDatasetFromFiles below) — same row shape (parseCSV output) either way.
+function buildDataset(nodeRows, edgeRows) {
   const nodes = nodeRows
     .filter(r => CLASS_MAP[r.type])
     .map(r => {
@@ -87,4 +84,39 @@ async function loadDataset(prefix) {
 
   computeLayeredLayout(nodes, edges);
   return { nodes, edges };
+}
+
+async function loadDataset(prefix) {
+  const [nodeRows, edgeRows] = await Promise.all([
+    fetchCSV('examples/' + prefix + '_nodes.csv'),
+    fetchCSV('examples/' + prefix + '_edges.csv'),
+  ]);
+  return buildDataset(nodeRows, edgeRows);
+}
+
+// User-uploaded (or drag-and-dropped) nodes/edges CSV pair — see the "manage
+// graphs" modal in js/app.js. Validated up front with actionable messages,
+// since a mistyped column name here would otherwise surface only as a
+// silently-empty graph.
+async function loadDatasetFromFiles(nodesFile, edgesFile) {
+  const [nodesText, edgesText] = await Promise.all([nodesFile.text(), edgesFile.text()]);
+  const nodeRows = parseCSV(nodesText);
+  const edgeRows = parseCSV(edgesText);
+
+  if (!nodeRows.length) throw new Error('the nodes file has no data rows');
+  const nodeCols = Object.keys(nodeRows[0]);
+  if (!nodeCols.includes('id') || !nodeCols.includes('type')) {
+    throw new Error('the nodes CSV needs at least "id" and "type" columns');
+  }
+  if (!edgeRows.length) throw new Error('the edges file has no data rows');
+  const edgeCols = Object.keys(edgeRows[0]);
+  if (!edgeCols.includes('source') || !edgeCols.includes('target')) {
+    throw new Error('the edges CSV needs at least "source" and "target" columns');
+  }
+  if (!nodeRows.some(r => CLASS_MAP[r.type])) {
+    const known = CLASSES.map(c => c.key).join(', ');
+    throw new Error('no node "type" value matches a known class (' + known + ')');
+  }
+
+  return buildDataset(nodeRows, edgeRows);
 }

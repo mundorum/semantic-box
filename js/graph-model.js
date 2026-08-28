@@ -26,6 +26,17 @@ const DATASET_LABELS = {
   'luminal-b': 'luminal-b',
 };
 
+// Turns an arbitrary display name (typed by the user when adding a graph)
+// into a key-safe slug: lowercased, non-alphanumerics collapsed to single
+// hyphens, leading/trailing hyphens trimmed. Falls back to 'graph' if
+// nothing alphanumeric survives (e.g. a name made entirely of punctuation).
+function slugify(str) {
+  const s = String(str || '').toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return s || 'graph';
+}
+
 // Neutral ink — edges never take a class hue; emphasis comes from stroke
 // weight and hop-decay opacity only.
 const CANVAS_INK = {

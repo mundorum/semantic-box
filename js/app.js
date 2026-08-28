@@ -22,11 +22,18 @@ createApp({
       railOpen: null,
       inspectorOpen: null,
 
-      // All five real subtype snapshots are loaded up front (see mounted());
-      // the top bar's dataset switch just changes which one `model` points
-      // at. `compareDataset` picks the second one for Compare mode's canvas
-      // B / the Alignment tab — see setDataset()/setCompareDataset() for how
-      // the two are kept distinct.
+      // The five built-in subtype snapshots seed `datasetMeta` (label +
+      // whether it's a built-in vs. a user-uploaded graph); `datasetKeys`
+      // (computed) is just its key order, so adding/removing a graph is
+      // adding/removing one datasetMeta entry — see "manage graphs" in
+      // openAddForm/submitAddGraph/removeDataset. `datasets` mirrors it 1:1
+      // by key, holding the actual loaded {nodes,edges}. `compareDataset`
+      // picks the second dataset for Compare mode's canvas B / the
+      // Alignment tab — see setDataset()/setCompareDataset() for how the
+      // two are kept distinct.
+      datasetMeta: Object.fromEntries(
+        Object.keys(DATASET_LABELS).map(k => [k, { label: DATASET_LABELS[k], builtin: true }])
+      ),
       datasets: {
         'normal': { nodes: [], edges: [] },
         'basal-like': { nodes: [], edges: [] },
@@ -34,11 +41,17 @@ createApp({
         'luminal-a': { nodes: [], edges: [] },
         'luminal-b': { nodes: [], edges: [] },
       },
-      datasetKeys: ['normal', 'basal-like', 'her2-enriched', 'luminal-a', 'luminal-b'],
       activeDataset: 'luminal-a',
       compareDataset: 'luminal-b',
       loadError: null,
       decayCurve: 'standard',
+
+      // "Manage graphs" modal — lists loaded graphs with a remove button
+      // each, plus an "add a graph" form (name + nodes/edges CSV upload or
+      // drag-and-drop). See js/data-loader.js loadDatasetFromFiles.
+      manageOpen: false,
+      addFormOpen: false,
+      addForm: { label: '', nodesFile: null, edgesFile: null, error: null, busy: false },
 
       panel: 'node', // 'node' | 'layer' | 'align'
 
@@ -130,21 +143,30 @@ createApp({
       return rail + 'minmax(0,1fr)' + inspector;
     },
 
+    // Insertion order of datasetMeta's keys — stable because JS objects with
+    // string keys preserve insertion order, so removing/adding an entry
+    // (see removeDataset/submitAddGraph) is the only thing that reorders this.
+    datasetKeys() { return Object.keys(this.datasetMeta); },
+
     model() { return this.datasets[this.activeDataset]; },
     modelB() { return this.datasets[this.compareDataset]; },
 
     datasetLabel() {
       const m = this.model;
-      return '◦ ' + DATASET_LABELS[this.activeDataset] + ' · ' + m.nodes.length + ' n · ' + m.edges.length + ' e';
+      return '◦ ' + this.dsLabel(this.activeDataset) + ' · ' + m.nodes.length + ' n · ' + m.edges.length + ' e';
     },
 
     // Real data is one flat snapshot — collapses the mock 4-layer build-stack
     // (stage 3) down to a single real "loaded" layer. See js/data-loader.js.
     layersMeta() {
       const m = this.model;
+      const meta = this.datasetMeta[this.activeDataset] || {};
+      const rule = meta.builtin
+        ? 'MicroRNA regulates Messenger RNA; Messenger RNA produces proteins that are part of Pathways. Loaded from examples/' + this.activeDataset + '_{nodes,edges}.csv.'
+        : 'MicroRNA regulates Messenger RNA; Messenger RNA produces proteins that are part of Pathways. Loaded from an uploaded nodes/edges CSV pair via "manage graphs".';
       return [{
-        name: 'L0 · ' + this.activeDataset,
-        rule: 'MicroRNA regulates Messenger RNA; Messenger RNA produces proteins that are part of Pathways. Loaded from examples/' + this.activeDataset + '_{nodes,edges}.csv.',
+        name: 'L0 · ' + this.dsLabel(this.activeDataset),
+        rule,
         delta: [{ label: 'loaded', nodes: String(m.nodes.length), edges: String(m.edges.length) }],
       }];
     },
@@ -279,7 +301,7 @@ createApp({
     cornerTagB() {
       const v = this.viewB;
       if (!v) return '';
-      return 'L0 · ' + DATASET_LABELS[this.compareDataset] + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop' + this.nsmSuffix;
+      return 'L0 · ' + this.dsLabel(this.compareDataset) + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop' + this.nsmSuffix;
     },
 
     nsmMetricOptions() {
@@ -528,25 +550,112 @@ createApp({
       return out;
     },
 
-    dsLabel(key) { return DATASET_LABELS[key] || key; },
+    dsLabel(key) { return (this.datasetMeta[key] && this.datasetMeta[key].label) || key; },
 
-    // Picking the dataset that's already B swaps A/B instead of colliding —
-    // there's no meaningful "other" default among five datasets the way
-    // there was with exactly two, so A and B just stay distinct by construction.
-    setDataset(key) {
-      if (this.activeDataset === key) return;
-      if (this.compareDataset === key) this.compareDataset = this.activeDataset;
-      this.activeDataset = key;
+    resetViewState() {
       this.selected = null;
       this.treeRoot = null;
       this.open = {};
       this.baseDepth = 2;
       this.qThreshold = null;
     },
+
+    // Picking the dataset that's already B swaps A/B instead of colliding —
+    // there's no meaningful "other" default among a growing, user-editable
+    // dataset list, so A and B just stay distinct by construction.
+    setDataset(key) {
+      if (this.activeDataset === key) return;
+      if (this.compareDataset === key) this.compareDataset = this.activeDataset;
+      this.activeDataset = key;
+      this.resetViewState();
+    },
     setCompareDataset(key) {
       if (this.compareDataset === key) return;
       if (this.activeDataset === key) this.activeDataset = this.compareDataset;
       this.compareDataset = key;
+    },
+
+    // --- Manage graphs: add/remove which datasets are loaded ---
+
+    openManage() { this.manageOpen = true; },
+    closeManage() { this.manageOpen = false; this.cancelAddForm(); },
+
+    openAddForm() {
+      this.addForm = { label: '', nodesFile: null, edgesFile: null, error: null, busy: false };
+      this.addFormOpen = true;
+    },
+    cancelAddForm() {
+      this.addFormOpen = false;
+      this.addForm = { label: '', nodesFile: null, edgesFile: null, error: null, busy: false };
+    },
+
+    browseFile(kind) { this.$refs[kind + 'FileInput'].click(); },
+    onPickFile(e, kind) {
+      const file = e.target.files && e.target.files[0];
+      if (file) this.setAddFormFile(kind, file);
+      e.target.value = ''; // allow re-picking the same filename later
+    },
+    onDropFile(e, kind) {
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) this.setAddFormFile(kind, file);
+    },
+    setAddFormFile(kind, file) {
+      this.addForm = Object.assign({}, this.addForm, { [kind + 'File']: file, error: null });
+    },
+
+    deriveDatasetLabel(filename) {
+      return String(filename || 'graph').replace(/\.[^./]+$/, '').replace(/[_-]?nodes$/i, '').trim() || 'graph';
+    },
+    uniqueDatasetKey(label) {
+      const base = slugify(label);
+      let key = base, i = 2;
+      while (this.datasetMeta[key]) { key = base + '-' + i; i++; }
+      return key;
+    },
+
+    async submitAddGraph() {
+      const f = this.addForm;
+      if (!f.nodesFile || !f.edgesFile) {
+        this.addForm = Object.assign({}, f, { error: 'choose both a nodes CSV and an edges CSV' });
+        return;
+      }
+      this.addForm = Object.assign({}, f, { busy: true, error: null });
+      try {
+        const dataset = await loadDatasetFromFiles(f.nodesFile, f.edgesFile);
+        const label = f.label.trim() || this.deriveDatasetLabel(f.nodesFile.name);
+        const key = this.uniqueDatasetKey(label);
+        this.datasetMeta = Object.assign({}, this.datasetMeta, { [key]: { label, builtin: false } });
+        this.datasets = Object.assign({}, this.datasets, { [key]: dataset });
+        this.setDataset(key);
+        this.closeManage();
+      } catch (err) {
+        this.addForm = Object.assign({}, this.addForm, { busy: false, error: String(err && err.message || err) });
+      }
+    },
+
+    // Keeps activeDataset/compareDataset always pointing at a dataset that
+    // still exists; refuses to drop the last one (there must always be
+    // something to show). Falls back out of Compare mode if fewer than two
+    // datasets remain, since a side-by-side comparison needs two.
+    removeDataset(key) {
+      if (this.datasetKeys.length <= 1) return;
+
+      const meta = Object.assign({}, this.datasetMeta);
+      delete meta[key];
+      const datasets = Object.assign({}, this.datasets);
+      delete datasets[key];
+      this.datasetMeta = meta;
+      this.datasets = datasets;
+
+      const remaining = Object.keys(meta);
+      if (this.activeDataset === key) {
+        this.activeDataset = remaining[0];
+        this.resetViewState();
+      }
+      if (this.compareDataset === key || this.compareDataset === this.activeDataset) {
+        this.compareDataset = remaining.find(k => k !== this.activeDataset) || remaining[0];
+      }
+      if (remaining.length < 2 && this.isCompare) this.showLayers();
     },
 
     // One-shot: mirrors the reference prototype's componentDidMount auto-

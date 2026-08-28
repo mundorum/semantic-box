@@ -402,10 +402,10 @@ The repo ships five real breast-cancer-subtype snapshots under `examples/`:
 `normal`, `basal-like`, `her2-enriched`, `luminal-a`, `luminal-b` — all five
 loaded up front in `mounted()`, not just the luminal pair. The top-bar dataset
 `seg` shows all five, labelled with the short display names above (`basal` for
-`basal-like`, `her2` for `her2-enriched`, the rest unchanged) via a
-`DATASET_LABELS` lookup — the dataset **key** stays the full prefix, because
+`basal-like`, `her2` for `her2-enriched`, the rest unchanged). These five seed
+`datasetMeta` (see §10) — the dataset **key** stays the full prefix, because
 it doubles as the `examples/<key>_{nodes,edges}.csv` filename; only the button
-copy is shortened.
+copy (`datasetMeta[key].label`, via the `dsLabel()` helper) is shortened.
 
 With exactly two datasets, Compare mode's second canvas could just be "the
 other one." With five, "the other one" is ambiguous, so Compare mode needs its
@@ -418,6 +418,63 @@ instead of colliding or silently no-op'ing. Only changing `activeDataset`
 resets selection/tree/q-threshold state (see `setDataset`) — changing
 `compareDataset` alone leaves those alone, since the shared `selected` id is
 still meaningfully looked up against the (unchanged) side-A dataset.
+
+### 10. Manage graphs — add/remove which datasets are loaded
+
+The five built-ins are a starting set, not a fixed roster: a `manage graphs`
+toolbar pill in the top bar (next to the dataset seg) opens a modal to add a
+user-supplied nodes/edges CSV pair as a new dataset, or remove any dataset —
+built-in or user-added — from the list. This is the one place in the app that
+needed a genuinely new chrome pattern (a modal), since nothing in the
+one-screen shell previously needed to interrupt the main view; it still
+follows the Organic chrome palette and control idioms throughout (cream
+ground, JetBrains Mono, pill/dashed-border/`.rail-bottom`-style rows) rather
+than inventing a separate visual language for it.
+
+- **Trigger & shell** — `.modal-scrim` is a fixed, full-viewport flex-centred
+  overlay (`rgba(32,30,29,.38)`) with `z-index:50`; clicking it (not its
+  children — `@click.self`) closes the modal, same "click bare background to
+  dismiss" idiom as `svgClick` clearing canvas selection. `.modal` itself uses
+  `--radius-md` (16px) rather than the app's usual dense 8px — it's a
+  dialog surface, not a control, so the Organic system's default radius
+  applies here even though the README's "local departures" section says the
+  dense chrome elsewhere deliberately doesn't use it.
+- **Graph list** — one `.manage-row` per loaded dataset (label, live node/edge
+  counts read straight from `datasets[key]`, a `custom` tag for anything with
+  `datasetMeta[key].builtin === false`, and a `remove` pill). The remove pill
+  is `disabled` whenever exactly one dataset remains — the app must always
+  have something to show — with the disabled state's title explaining why
+  rather than the button silently doing nothing.
+- **Add-a-graph form** — a dashed `+ add a graph` button (same visual idiom as
+  the rail's already-present, still-unwired "build a layer over top" button)
+  expands an inline form: an optional name field (defaults to the nodes
+  filename, minus extension and a trailing `_nodes`/`-nodes`, if left blank),
+  then two `.dropzone` targets — one for the nodes CSV, one for the edges CSV —
+  each accepting either a click-to-browse (a hidden `input[type=file]` per
+  zone, triggered via a ref) or a real drag-and-drop (`@dragover.prevent` +
+  `@drop.prevent`, reading `event.dataTransfer.files[0]`). Both paths feed the
+  same `setAddFormFile(kind, file)`, so there is exactly one code path from
+  "a File object exists" onward — don't let the two input methods diverge.
+- **Validation** — `loadDatasetFromFiles` (`js/data-loader.js`) parses both
+  files and checks, in order: the nodes CSV has `id` and `type` columns, the
+  edges CSV has `source` and `target` columns, and at least one node's `type`
+  matches a known class (`MicroRNA` / `Messenger RNA` / `Pathway` — the
+  canvas literally cannot render a class it doesn't have a colour/shape for,
+  so this must be checked before the dataset is accepted, not discovered
+  later as an empty graph). Each failure throws a specific, actionable
+  message that surfaces directly in `.add-graph-error` — a dashed accent box,
+  same visual idiom as the trace-tree's row-cap notice.
+- **On success** — the new dataset gets a unique key via `slugify(label)`
+  (lowercase, non-alphanumerics collapsed to hyphens; a numeric suffix is
+  appended on collision), is merged into `datasetMeta`/`datasets`, and is
+  immediately made the active dataset (`setDataset(key)`) with the modal
+  closed — the user gets to see their upload rendered right away as
+  confirmation it worked, rather than having to go find it in the seg control.
+- **Removing a dataset** keeps two invariants intact: `activeDataset` and
+  `compareDataset` always point at something that still exists (falling back
+  to another remaining key, swapping if a collision would result), and
+  Compare mode drops back to Layers mode if removal leaves fewer than two
+  datasets to compare — see `removeDataset`.
 
 ## State management
 
@@ -444,6 +501,10 @@ hideOrphanMrna: boolean               // default false — see §8
 viewTransform: { x, y, k }            // pan/zoom, shared across compare-mode canvases — see §4
 activeDataset, compareDataset: string // dataset keys, kept distinct — see §9
 cornerTagShown, minimapShown: boolean // default true — independent overlay toggles, see §4
+datasetMeta: Record<key, { label, builtin: boolean }>  // dataset registry — see §10
+datasets: Record<key, { nodes, edges }>                // loaded graph data, keyed like datasetMeta
+manageOpen, addFormOpen: boolean      // "manage graphs" modal — see §10
+addForm: { label, nodesFile, edgesFile, error, busy }  // pending add-a-graph upload — see §10
 ```
 
 Derived per render, not stored: the filtered view (nodes, edges, adjacency,

@@ -21,6 +21,7 @@
         <button class="seg-opt" v-for="k in datasetKeys" :key="k"
                 :class="{ 'seg-opt--selected': activeDataset === k }" @click="setDataset(k)">[[ dsLabel(k) ]]</button>
       </div>
+      <button class="toolbar-pill" @click="openManage" title="add or remove displayed graphs">manage graphs</button>
       <span class="topbar__dataset">[[ datasetLabel ]]</span>
       <template v-if="isCompare">
         <span class="topbar__vs">vs</span>
@@ -391,6 +392,63 @@
       </div>
 
     </div>
+
+    <!-- manage graphs — add/remove which datasets are loaded -->
+    <div class="modal-scrim" v-if="manageOpen" @click.self="closeManage">
+      <div class="modal">
+        <div class="modal__header">
+          <span class="modal__title">Manage graphs</span>
+          <span class="rail-header__spacer"></span>
+          <button class="modal__close" @click="closeManage" title="close">×</button>
+        </div>
+
+        <div class="modal__body">
+          <div class="section-label">Loaded graphs</div>
+          <div class="manage-list">
+            <div class="manage-row" v-for="k in datasetKeys" :key="k">
+              <span class="manage-row__name">[[ dsLabel(k) ]]</span>
+              <span class="manage-row__meta">[[ datasets[k].nodes.length ]] n · [[ datasets[k].edges.length ]] e</span>
+              <span class="manage-row__tag" v-if="!datasetMeta[k].builtin">custom</span>
+              <button class="manage-row__remove" @click="removeDataset(k)"
+                      :disabled="datasetKeys.length <= 1"
+                      :title="datasetKeys.length <= 1 ? 'at least one graph must stay loaded' : 'remove this graph'">remove</button>
+            </div>
+          </div>
+
+          <button class="build-layer-btn manage-add-btn" v-if="!addFormOpen" @click="openAddForm">+ add a graph</button>
+
+          <div class="add-graph-form" v-if="addFormOpen">
+            <div class="section-label">Add a graph</div>
+            <input class="search-input add-graph-name" placeholder="graph name (optional — defaults to the nodes filename)"
+                   v-model="addForm.label">
+
+            <div class="dropzone" :class="{ 'dropzone--filled': addForm.nodesFile }"
+                 @dragover.prevent @drop.prevent="onDropFile($event, 'nodes')" @click="browseFile('nodes')">
+              <span v-if="addForm.nodesFile">nodes: [[ addForm.nodesFile.name ]]</span>
+              <span v-else>drop the <strong>nodes</strong> CSV here, or click to browse</span>
+            </div>
+            <input type="file" accept=".csv,text/csv" ref="nodesFileInput" style="display:none"
+                   @change="onPickFile($event, 'nodes')">
+
+            <div class="dropzone" :class="{ 'dropzone--filled': addForm.edgesFile }"
+                 @dragover.prevent @drop.prevent="onDropFile($event, 'edges')" @click="browseFile('edges')">
+              <span v-if="addForm.edgesFile">edges: [[ addForm.edgesFile.name ]]</span>
+              <span v-else>drop the <strong>edges</strong> CSV here, or click to browse</span>
+            </div>
+            <input type="file" accept=".csv,text/csv" ref="edgesFileInput" style="display:none"
+                   @change="onPickFile($event, 'edges')">
+
+            <p class="add-graph-error" v-if="addForm.error">[[ addForm.error ]]</p>
+
+            <div class="add-graph-actions">
+              <button class="toolbar-pill" @click="cancelAddForm">cancel</button>
+              <button class="pill" @click="submitAddGraph" :disabled="addForm.busy">[[ addForm.busy ? 'adding…' : 'add graph' ]]</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
