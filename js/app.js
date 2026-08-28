@@ -88,6 +88,13 @@ createApp({
       // the "synced pan · zoom" claim already made by the compare-mode badge.
       viewTransform: { x: 0, y: 0, k: 1 },
 
+      // Hover emphasis — a transient "which node is the mouse nearest to"
+      // pick, independent per canvas side (unlike pan/zoom, hover is never
+      // synced across compare-mode's two canvases: the mouse is only ever
+      // over one of them). See updateHover.
+      hoverA: null,
+      hoverB: null,
+
       // Trace tree — a DFS path tree pinned to the selected node unless the
       // user has pinned it elsewhere (see select() for the pinning rule).
       treeRoot: null,
@@ -318,6 +325,23 @@ createApp({
       );
     },
 
+    // Which node classes the active metric can ever mark, across both
+    // datasets — today only MicroRNA carries NSM analysis (see
+    // js/data-loader.js), so Messenger RNA and Pathway are never in this set
+    // for any metric. Used in computeNodesFor to decide, per node, whether
+    // NSM mode's "only marked nodes get a label" rule applies to it at all:
+    // a class that can never be marked must fall back to the normal
+    // hop-based label rule, or it goes permanently unlabelled the instant
+    // any metric is picked — that was the bug, not a class-specific quirk.
+    nsmMarkableClasses() {
+      const set = new Set();
+      if (this.nsmMetric === 'none') return set;
+      const scan = nodes => nodes.forEach(n => { if (n.nsm[this.nsmMetric]) set.add(n.cls); });
+      scan(this.model.nodes);
+      if (this.modelB) scan(this.modelB.nodes);
+      return set;
+    },
+
     panelTabs() {
       const order = this.isCompare
         ? [['align', 'Alignment'], ['node', 'Node'], ['layer', 'Layer']]
@@ -446,9 +470,9 @@ createApp({
     },
 
     edgesRender() { return this.computeEdgesFor(this.view); },
-    nodesRender() { return this.computeNodesFor(this.view, this.nsmMarks.A); },
+    nodesRender() { return this.computeNodesFor(this.view, this.nsmMarks.A, this.hoverA); },
     edgesRenderB() { return this.viewB ? this.computeEdgesFor(this.viewB) : []; },
-    nodesRenderB() { return this.viewB ? this.computeNodesFor(this.viewB, this.nsmMarks.B) : []; },
+    nodesRenderB() { return this.viewB ? this.computeNodesFor(this.viewB, this.nsmMarks.B, this.hoverB) : []; },
   },
 
   methods: {
@@ -493,8 +517,11 @@ createApp({
     // marks: this side's {nodeId: {state,strong,color}} from nsmMarks —
     // strong = this side's own specific/differential/common classification;
     // non-strong = an echo of the OTHER side's classification, in the same
-    // colour, so the same node can be spotted on both canvases.
-    computeNodesFor(v, marks) {
+    // colour, so the same node can be spotted on both canvases. hoverId:
+    // this side's currently-hovered node (see updateHover) — a transient
+    // emphasis independent of selection, for picking one node out of a
+    // cluster of overlapping ones before committing to a click.
+    computeNodesFor(v, marks, hoverId) {
       const W = this.canvasWidth, H = this.canvasHeight;
       const alpha = DECAY[this.decayCurve];
       // See the matching comment in computeEdgesFor: key off the global
@@ -502,33 +529,43 @@ createApp({
       const filtering = this.focus === 'filter' && this.selected;
       const dim = this.focus === 'none' || !this.selected ? 1 : 0.1;
       const nsmActive = this.nsmMetric !== 'none';
-      // NSM mode only takes over labelling ("only marked nodes get a label")
-      // when there's something to mark — with no NSM data at all (every
-      // example dataset here lacks the *_descending/*_ascending columns),
-      // marks is always empty and this would otherwise blank every label.
-      const hasMarks = Object.keys(marks).length > 0;
+      const markableClasses = this.nsmMarkableClasses;
       const out = [];
       v.nodes.forEach(n => {
         const sub = v.sel && v.dist[n.id] !== undefined;
         if (filtering && !sub) return;
         const hop = sub ? v.dist[n.id] : 0;
         const isSel = n.id === v.sel;
-        const r = Math.min(9, 2.6 + (v.deg[n.id] || 0) * 0.5) + (isSel ? 2 : 0);
+        // Selection already reads as "emphasized"; hover only adds its own
+        // (smaller, distinct) treatment on top of a node that isn't already
+        // selected, so the two states never visually compete.
+        const isHovered = !isSel && n.id === hoverId;
+        const emph = isSel || isHovered;
+        const r = Math.min(9, 2.6 + (v.deg[n.id] || 0) * 0.5) + (isSel ? 2 : (isHovered ? 1.2 : 0));
         const c = CLASS_MAP[n.cls];
         const px = 24 + n.x * (W - 48), py = 24 + n.y * (H - 48);
         const layerOp = (this.op[n.layer] ?? 100) / 100;
-        const op = (sub ? alpha[Math.min(hop, 3)] : dim) * layerOp;
+        // Hover forces full opacity regardless of hop-decay/dim — the whole
+        // point is to pop one node out of a faded or overlapping cluster so
+        // it can be told apart before clicking.
+        const op = isHovered ? 1 : (sub ? alpha[Math.min(hop, 3)] : dim) * layerOp;
 
         // NSM mode replaces the usual "selected + hop<=2" label rule with
         // "only marked nodes" — otherwise a few hundred faded genes would
-        // still all carry labels and bury the ones that actually matter here
-        // — but only once NSM actually has marks to show (see hasMarks above).
+        // still all carry labels and bury the ones that actually matter
+        // here. But that restriction only makes sense for a class the
+        // active metric can actually mark (see nsmMarkableClasses) — e.g.
+        // NSM analysis today is MicroRNA-only, so Messenger RNA and Pathway
+        // nodes can never be marked and must keep the normal label rule, or
+        // those two classes would go permanently unlabelled the instant any
+        // metric is picked. A hovered node always gets its label, on top of
+        // whichever of those two rules is in force — that's the point of hovering.
         const mark = marks[n.id];
-        const showLabel = nsmActive && hasMarks
+        const showLabel = isHovered || (nsmActive && markableClasses.has(n.cls)
           ? (this.labels && !!mark)
-          : (this.labels && (isSel || (sub && hop <= 2)));
+          : (this.labels && (isSel || (sub && hop <= 2))));
         const labelText = n.label || n.id;
-        const tw = String(labelText).length * (isSel ? 6.6 : 5.4);
+        const tw = String(labelText).length * (emph ? 6.6 : 5.4);
         const flip = px + r + 4 + tw > W - 6 && px - r - 4 - tw > 6;
         const labelX = flip ? Math.max(px - r - 4, 6 + tw) : Math.min(px + r + 4, W - 6 - tw);
 
@@ -543,8 +580,12 @@ createApp({
           ringNsmColor: mark ? mark.color : null,
           ringNsmWidth: mark && mark.strong ? 1.8 : 1,
           ringNsmOpacity: mark ? (mark.strong ? 0.95 : 0.45) : 0,
+          // Dashed neutral-ink ring — distinct from the selection stroke, the
+          // class-coloured hop ring, and the NSM ring, so hover never reads
+          // as any of those other states.
+          hoverRing: isHovered, ringHoverR: r + 2.4,
           showLabel, labelX, labelY: py + 3.5, labelAnchor: flip ? 'end' : 'start',
-          labelSize: isSel ? 11 : 9, labelOpacity: Math.max(op, 0.55),
+          labelSize: emph ? 11 : 9, labelOpacity: isHovered ? 1 : Math.max(op, 0.55),
         });
       });
       return out;
@@ -720,6 +761,24 @@ createApp({
 
     resetView() { this.viewTransform = { x: 0, y: 0, k: 1 }; },
 
+    // Converts a client-space (viewport pixel) point to this canvas's SVG
+    // viewBox coordinate space — i.e. before the pan/zoom <g> transform.
+    clientToViewBox(svg, clientX, clientY) {
+      const rect = svg.getBoundingClientRect();
+      const scaleX = this.canvasWidth / rect.width;
+      const scaleY = this.canvasHeight / rect.height;
+      return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+    },
+    // Further maps a viewBox-space point through the inverse of the current
+    // pan/zoom transform, landing in the same "world" space node cx/cy/r are
+    // computed in (computeNodesFor) — used by onWheel (to keep the point
+    // under the cursor fixed while zooming) and by updateHover (to compare
+    // the cursor against node positions regardless of current pan/zoom).
+    viewBoxToWorld(p) {
+      const t = this.viewTransform;
+      return { x: (p.x - t.x) / t.k, y: (p.y - t.y) / t.k };
+    },
+
     // Pan/zoom: wheel zooms anchored on the pointer, drag pans. Both live on
     // the wrapping `.canvas` div (not the svg) so native node/background
     // clicks keep working undisturbed — see nodeClick/svgClick for the
@@ -727,17 +786,12 @@ createApp({
     onWheel(e) {
       const svg = e.currentTarget.querySelector('svg');
       if (!svg) return;
-      const rect = svg.getBoundingClientRect();
-      const scaleX = this.canvasWidth / rect.width;
-      const scaleY = this.canvasHeight / rect.height;
-      const px = (e.clientX - rect.left) * scaleX;
-      const py = (e.clientY - rect.top) * scaleY;
+      const p = this.clientToViewBox(svg, e.clientX, e.clientY);
       const t = this.viewTransform;
       const factor = Math.exp(-e.deltaY * 0.0015);
       const k1 = Math.min(8, Math.max(0.5, t.k * factor));
-      const wx = (px - t.x) / t.k;
-      const wy = (py - t.y) / t.k;
-      this.viewTransform = { k: k1, x: px - wx * k1, y: py - wy * k1 };
+      const w = this.viewBoxToWorld(p);
+      this.viewTransform = { k: k1, x: p.x - w.x * k1, y: p.y - w.y * k1 };
     },
     // Deliberately NOT using setPointerCapture: per the Pointer Events spec,
     // capturing an element retargets the subsequent compatibility mouse
@@ -756,6 +810,10 @@ createApp({
         scaleX: this.canvasWidth / rect.width, scaleY: this.canvasHeight / rect.height,
       };
       this._dragMoved = false;
+      // A stale hover ring sitting on screen while the user pans past it
+      // would read as pointing at something — clear both sides up front.
+      this.hoverA = null;
+      this.hoverB = null;
       window.removeEventListener('pointermove', this.onWindowPointerMove);
       window.removeEventListener('pointerup', this.onWindowPointerUp);
       window.addEventListener('pointermove', this.onWindowPointerMove);
@@ -773,6 +831,40 @@ createApp({
       this._panStart = null;
       window.removeEventListener('pointermove', this.onWindowPointerMove);
       window.removeEventListener('pointerup', this.onWindowPointerUp);
+    },
+
+    // Hover emphasis: picking one node out of a cluster of overlapping ones
+    // before committing to a click. Rather than relying on native per-shape
+    // mouseenter (which would just hit whichever node happens to be drawn on
+    // top), this does its own geometry test on every rendered node and picks
+    // the one whose centre the cursor is nearest to, among those the cursor
+    // is actually inside — see updateHover. RAF-throttled since mousemove
+    // fires far more often than a frame renders, and this is O(nodes) work.
+    onCanvasMouseMove(e, side) {
+      if (this._panStart) return; // don't fight an active drag with hover flicker
+      const div = e.currentTarget;
+      const clientX = e.clientX, clientY = e.clientY;
+      if (this._hoverRAF) return;
+      this._hoverRAF = requestAnimationFrame(() => {
+        this._hoverRAF = null;
+        this.updateHover(div, clientX, clientY, side);
+      });
+    },
+    onCanvasMouseLeave(side) {
+      if (side === 'B') this.hoverB = null; else this.hoverA = null;
+    },
+    updateHover(div, clientX, clientY, side) {
+      const svg = div.querySelector('svg');
+      if (!svg) return;
+      const p = this.viewBoxToWorld(this.clientToViewBox(svg, clientX, clientY));
+      const nodes = side === 'B' ? this.nodesRenderB : this.nodesRender;
+      let best = null, bestDist = Infinity;
+      for (const n of nodes) {
+        const dist = Math.hypot(n.cx - p.x, n.cy - p.y);
+        if (dist <= n.r && dist < bestDist) { best = n.id; bestDist = dist; }
+      }
+      if (side === 'B') { if (this.hoverB !== best) this.hoverB = best; }
+      else if (this.hoverA !== best) { this.hoverA = best; }
     },
 
     setFocus(mode) { this.focus = mode; },

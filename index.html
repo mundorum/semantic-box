@@ -176,8 +176,9 @@
         </div>
 
         <div class="center-body" :ref="setCanvasWrap">
-          <div class="canvas" v-if="!isCompare" @wheel.prevent="onWheel" @pointerdown="onPointerDown">
-            <svg :viewBox="'0 0 ' + canvasWidth + ' ' + canvasHeight" preserveAspectRatio="xMidYMid slice" @click="svgClick">
+          <div class="canvas" v-if="!isCompare" @wheel.prevent="onWheel" @pointerdown="onPointerDown"
+               @mousemove="onCanvasMouseMove($event, 'A')" @mouseleave="onCanvasMouseLeave('A')">
+            <svg :view-box.camel="'0 0 ' + canvasWidth + ' ' + canvasHeight" preserveAspectRatio="xMidYMid slice" @click="svgClick">
               <g :transform="'translate(' + viewTransform.x + ',' + viewTransform.y + ') scale(' + viewTransform.k + ')'">
                 <line v-for="e in edgesRender" :key="e.key"
                       :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2"
@@ -199,6 +200,8 @@
                         :stroke="n.ringColor" stroke-width="0.7" :stroke-opacity="n.ringOpacity" style="pointer-events:none" />
                   <circle v-if="n.nsmRing" :cx="n.cx" :cy="n.cy" :r="n.ringNsmR" fill="none"
                         :stroke="n.ringNsmColor" :stroke-width="n.ringNsmWidth" :stroke-opacity="n.ringNsmOpacity" style="pointer-events:none" />
+                  <circle v-if="n.hoverRing" :cx="n.cx" :cy="n.cy" :r="n.ringHoverR" fill="none"
+                        stroke="#201e1d" stroke-width="1" stroke-dasharray="2,2" stroke-opacity="0.85" style="pointer-events:none" />
                   <text v-if="n.showLabel" :x="n.labelX" :y="n.labelY" :text-anchor="n.labelAnchor" :font-size="n.labelSize"
                         font-family="'JetBrains Mono',monospace" fill="#201e1d" :fill-opacity="n.labelOpacity" style="pointer-events:none">[[ n.label ]]</text>
                 </template>
@@ -211,8 +214,9 @@
           <!-- compare mode: two canvases side by side, split by a divider, sharing
                selection/focus/hop/layer state — see js/app.js viewB / computeEdgesFor -->
           <template v-else>
-            <div class="canvas canvas--divided" @wheel.prevent="onWheel" @pointerdown="onPointerDown">
-              <svg :viewBox="'0 0 ' + canvasWidth + ' ' + canvasHeight" preserveAspectRatio="xMidYMid slice" @click="svgClick">
+            <div class="canvas canvas--divided" @wheel.prevent="onWheel" @pointerdown="onPointerDown"
+                 @mousemove="onCanvasMouseMove($event, 'A')" @mouseleave="onCanvasMouseLeave('A')">
+              <svg :view-box.camel="'0 0 ' + canvasWidth + ' ' + canvasHeight" preserveAspectRatio="xMidYMid slice" @click="svgClick">
                 <g :transform="'translate(' + viewTransform.x + ',' + viewTransform.y + ') scale(' + viewTransform.k + ')'">
                   <line v-for="e in edgesRender" :key="e.key"
                         :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2"
@@ -234,6 +238,8 @@
                           :stroke="n.ringColor" stroke-width="0.7" :stroke-opacity="n.ringOpacity" style="pointer-events:none" />
                     <circle v-if="n.nsmRing" :cx="n.cx" :cy="n.cy" :r="n.ringNsmR" fill="none"
                           :stroke="n.ringNsmColor" :stroke-width="n.ringNsmWidth" :stroke-opacity="n.ringNsmOpacity" style="pointer-events:none" />
+                    <circle v-if="n.hoverRing" :cx="n.cx" :cy="n.cy" :r="n.ringHoverR" fill="none"
+                          stroke="#201e1d" stroke-width="1" stroke-dasharray="2,2" stroke-opacity="0.85" style="pointer-events:none" />
                     <text v-if="n.showLabel" :x="n.labelX" :y="n.labelY" :text-anchor="n.labelAnchor" :font-size="n.labelSize"
                           font-family="'JetBrains Mono',monospace" fill="#201e1d" :fill-opacity="n.labelOpacity" style="pointer-events:none">[[ n.label ]]</text>
                   </template>
@@ -242,8 +248,9 @@
               <span class="canvas-tag" v-if="cornerTagShown">A · [[ cornerTag ]]</span>
               <div class="minimap" v-if="minimapShown"><div class="minimap__viewport" :style="minimapViewportStyle"></div></div>
             </div>
-            <div class="canvas" @wheel.prevent="onWheel" @pointerdown="onPointerDown">
-              <svg :viewBox="'0 0 ' + canvasWidth + ' ' + canvasHeight" preserveAspectRatio="xMidYMid slice" @click="svgClick">
+            <div class="canvas" @wheel.prevent="onWheel" @pointerdown="onPointerDown"
+                 @mousemove="onCanvasMouseMove($event, 'B')" @mouseleave="onCanvasMouseLeave('B')">
+              <svg :view-box.camel="'0 0 ' + canvasWidth + ' ' + canvasHeight" preserveAspectRatio="xMidYMid slice" @click="svgClick">
                 <g :transform="'translate(' + viewTransform.x + ',' + viewTransform.y + ') scale(' + viewTransform.k + ')'">
                   <line v-for="e in edgesRenderB" :key="e.key"
                         :x1="e.x1" :y1="e.y1" :x2="e.x2" :y2="e.y2"
@@ -265,6 +272,8 @@
                           :stroke="n.ringColor" stroke-width="0.7" :stroke-opacity="n.ringOpacity" style="pointer-events:none" />
                     <circle v-if="n.nsmRing" :cx="n.cx" :cy="n.cy" :r="n.ringNsmR" fill="none"
                           :stroke="n.ringNsmColor" :stroke-width="n.ringNsmWidth" :stroke-opacity="n.ringNsmOpacity" style="pointer-events:none" />
+                    <circle v-if="n.hoverRing" :cx="n.cx" :cy="n.cy" :r="n.ringHoverR" fill="none"
+                          stroke="#201e1d" stroke-width="1" stroke-dasharray="2,2" stroke-opacity="0.85" style="pointer-events:none" />
                     <text v-if="n.showLabel" :x="n.labelX" :y="n.labelY" :text-anchor="n.labelAnchor" :font-size="n.labelSize"
                           font-family="'JetBrains Mono',monospace" fill="#201e1d" :fill-opacity="n.labelOpacity" style="pointer-events:none">[[ n.label ]]</text>
                   </template>

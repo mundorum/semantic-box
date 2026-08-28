@@ -232,7 +232,7 @@ See the two-palette section for ground, grid, hairline, node and edge colour.
 - **Node opacity**: `decayAlpha[min(hop,3)] × (layerOpacity/100)`. Nodes outside the subgraph go to `0.1` (or are removed entirely in `filter` mode).
 - **Labels** (when labels are on): shown for the selected node, any node at hop ≤ 2, and **always** for `case` nodes. JetBrains Mono, 11px selected / 9px otherwise, `fill: #201e1d`, `fillOpacity: max(op, 0.55)`, `pointer-events:none`. (Raised from hop ≤ 1 to hop ≤ 2 — with the tripartite dataset, a 2-hop BFS from a MicroRNA node reaches its Pathways only at hop 2, and those were going unlabelled even though the hop-ring and edges already made them visually part of the subgraph.)
   Placement measures the string (mono advance ≈ 0.6em → `len × 6.6` selected, `× 5.4` otherwise) and draws right of the node by default; **flips to the left only if the flipped position also fits**, and both branches clamp inside the box (6px inset) so labels never run off either edge.
-  **NSM mode** (`Compare by` metric ≠ off) normally replaces this rule with "only NSM-marked nodes get a label," so a few hundred faded genes don't bury the handful that matter for the metric. But that rule must only take over when there is something to mark: guard it with `hasMarks = Object.keys(marks).length > 0` and fall back to the normal rule when `marks` is empty. Every current example dataset has no `*_descending`/`*_ascending` NSM columns at all, so without this guard every label on the canvas silently disappears the instant any metric is picked — the NSM rings never render either (no marks to draw), so the only visible symptom is "labels vanished," which is what makes this easy to miss.
+  **NSM mode** (`Compare by` metric ≠ off) normally replaces this rule with "only NSM-marked nodes get a label," so a few hundred faded genes don't bury the handful that matter for the metric. But that restriction must be scoped **per node class**, not applied globally: check it against `nsmMarkableClasses` — the set of classes that have *any* non-null `n.nsm[metricKey]` entry anywhere in either loaded dataset — and only suppress the normal label rule for a node whose own class is in that set. NSM analysis today is computed exclusively for MicroRNA (see `js/data-loader.js` — Messenger RNA and Pathway rows always parse to `[]`/`null`), so `nsmMarkableClasses` never contains those two classes; a node of either class keeps the ordinary "selected + hop ≤ 2" label rule regardless of whether Compare By is on. Getting this wrong — checking "does *any* mark exist anywhere" instead of "can *this node's class* ever be marked" — reads as: turn on any metric, and every Messenger RNA and Pathway label vanishes instantly, permanently, for as long as Compare By stays on, even though they're still visibly part of the highlighted subgraph (hop rings, edges, opacity all still show it). The `examples/old/luminal-{a,b}_nodes.csv` files (kept in the repo for testing only, not wired into the app's dataset list) carry the real NSM columns and per-node metrics, and are the only current fixture that exercises this path — upload them via "manage graphs" (§10) to test Compare By against real data. Every dataset actually shipped for normal use has no NSM data at all, which is exactly why this bug was invisible until Compare By was tested against a dataset that actually has metrics.
 - Clicking a node selects it; clicking bare SVG background clears the selection.
 - **Corner tag** — top-left pill, `1px solid divider`, `background:#f9f4ed`, JetBrains Mono 400 10px, `--color-neutral-700`, ellipsised. Reads `L3 · clustered · 118 n · 190 e · focus highlight · 2 hop`; in compare mode prefixed `A · ` / `B · `. Hideable via the `info band` toolbar pill — it can sit on top of nodes near the top-left corner on a dense layout.
 - **Minimap** — bottom-right, 104×68, `radius 6px`, `1px solid #c0b6a5`, `background:#f9f4ed`, containing a viewport rect, `1px solid #c67139`, `radius 3px`. Wired to the real pan/zoom transform: rect `left/top/width/height` are `-panX/k`, `-panY/k`, `100/k`, `100/k` percent of the canvas box. `overflow:hidden` on the minimap crops the rect when panned/zoomed past the edge rather than letting it escape the box. Hideable via the `minimap` toolbar pill, independently of the corner tag — same rationale.
@@ -240,6 +240,8 @@ See the two-palette section for ground, grid, hairline, node and edge colour.
 - **Pan & zoom** — implemented. Mouse wheel zooms anchored on the pointer (clamped `0.5×`–`8×`); click-drag pans. Both live as a single `{x, y, k}` transform applied via an SVG `<g transform="translate(x,y) scale(k)">` wrapping the edges/nodes/labels, so labels and stroke widths scale with content (standard SVG behaviour — no `vector-effect` correction applied). A `reset view` toolbar pill resets the transform to identity. In compare mode the transform is a single shared value driving both canvases — this is what makes the existing "synced pan · zoom" compare-badge copy true rather than aspirational.
 
   **Do not use `setPointerCapture` on the pan-handling element.** Per the Pointer Events spec, capturing a pointer retargets its subsequent *compatibility mouse events* — including `click` — to the capturing element too. Since node selection relies on a `@click` bound directly to each node's own SVG shape, capturing on the wrapping `.canvas` div silently swallows every node click once a drag has been armed (pointerdown always arms it, even for a plain click). Track the drag via `window`-level `pointermove`/`pointerup` listeners added on `pointerdown` and removed on `pointerup` instead — this keeps tracking the pointer outside the element's bounds without touching event targeting. Disambiguate a pan from a click with a small movement threshold (~3px in canvas units) recorded on a `_dragMoved` flag, checked by both the node click handler and the background-click handler (`svgClick`) — a background click also must not fire immediately after a pan that happens to release over empty canvas.
+
+  **`:viewBox` needs the `.camel` modifier — this is an in-DOM-template app.** This app has no build step: `index.html`'s markup *is* the Vue template, parsed once by the browser's native HTML tokenizer before Vue ever sees it. That tokenizer lowercases attribute names it doesn't recognize verbatim, and `:viewBox` (with the leading colon) isn't in its fixed list of case-preserved SVG attribute names — only the literal name `viewBox` is. The result: `:viewBox="expr"` silently becomes the attribute `viewbox` in the parsed DOM, Vue's runtime compiler reads that already-lowercased name, and it ends up calling `setAttribute('viewbox', ...)` — which the SVG spec does not recognize, so the element's actual `viewBox` is simply never set. The failure mode is quiet rather than loud: the canvas still renders, because `canvasWidth`/`canvasHeight` are derived from the *measured* size of the container the `<svg>` fills at `100%/100%`, so the "no scaling at all" fallback (1 SVG user-unit = 1 rendered px) lands within a pixel or so of what a working viewBox would have produced anyway. It only becomes consequential for code that does its own screen-to-SVG coordinate math (pan/zoom, and the hover hit-test in §11) — that math assumes a real `scaleX = canvasWidth / rect.width` correction is meaningful, which is only true once the viewBox is actually influencing rendering. The fix is Vue's own documented workaround for exactly this class of bug: bind the **kebab-case** attribute name with the `camel` modifier — `:view-box.camel="expr"` — never `:viewBox`, in any template that reaches the browser as raw HTML rather than through a build-time compiler. `view-box` has no uppercase letters, so the native tokenizer passes it through untouched; Vue then camelizes it back to `viewBox` itself before setting the attribute.
 
 Decay curves (opacity by hop 0..3), selectable via tweak:
 
@@ -476,6 +478,56 @@ than inventing a separate visual language for it.
   Compare mode drops back to Layers mode if removal leaves fewer than two
   datasets to compare — see `removeDataset`.
 
+### 11. Hover emphasis — picking one node out of an overlapping cluster
+
+Dense regions of the canvas (see the Messenger RNA columns at real dataset
+scale — hundreds of same-size, same-colour circles a few px apart) make it
+hard to land a click on one specific node. Hovering now emphasizes whichever
+node the cursor is over, as a transient state distinct from selection, before
+the user commits to a click.
+
+- **Why not native per-shape `mouseenter`.** The obvious implementation —
+  a `@mouseenter`/`@mouseleave` pair on each node's own SVG shape — only ever
+  tells you which element the browser's hit-test put on top at that pixel,
+  i.e. whichever node happens to be drawn last among the overlapping set. That
+  does not track distance to any node's actual centre, so it can't answer "of
+  the several circles under the cursor, which one is the cursor closest to
+  the middle of" — exactly the case that makes overlap hard to work with.
+- **What it does instead**: a single `mousemove` listener on the wrapping
+  `.canvas` div (not the SVG, not per-node) converts the cursor position
+  through the pan/zoom transform into the same "world" coordinate space
+  `computeNodesFor` computes `cx`/`cy`/`r` in (`clientToViewBox` +
+  `viewBoxToWorld`, shared with the wheel-zoom math — see §4's viewBox note),
+  then does its own O(nodes) geometry pass: among every rendered node whose
+  radius contains that point, pick the one nearest to its own centre. That is
+  a direct, general answer to "which node is the mouse nearest to," rather
+  than a workaround tied to any specific case — see `updateHover`.
+- **RAF-throttled**: `mousemove` fires far more often than a frame renders,
+  and this is O(nodes) work re-triggering a `nodesRender`/`nodesRenderB`
+  recompute each time it changes. `onCanvasMouseMove` schedules at most one
+  `updateHover` per animation frame via `requestAnimationFrame`, capturing
+  `clientX`/`clientY`/`currentTarget` synchronously first — `currentTarget` is
+  only valid for the duration of the event dispatch, so it cannot be read
+  later from inside the deferred callback.
+- **Suppressed during an active pan** (`this._panStart` set) — otherwise a
+  fast drag would flicker the hover ring across everything it passes over,
+  and there is nothing productive to emphasize mid-drag. Both hover fields are
+  cleared on `pointerdown` so a stale ring doesn't linger through a pan.
+- **Independent per canvas side** (`hoverA`/`hoverB`) — unlike pan/zoom, hover
+  is never synced across Compare mode's two canvases; the cursor is only ever
+  over one of them at a time.
+- **Visual treatment**, applied in `computeNodesFor` (`isHovered` — never true
+  for the already-selected node, so the two states don't visually compete):
+  full opacity regardless of hop-decay/dim (the point is to pop one node out
+  of a faded or overlapping cluster), a forced label at the selected node's
+  larger 11px size regardless of the usual label rules (including NSM mode's —
+  see §4), and a dashed neutral-ink ring (`stroke:#201e1d`, `stroke-dasharray:
+  2,2`, `r + 2.4`) — deliberately a *fourth*, distinct ring pattern from the
+  solid 2px selection stroke, the class-coloured solid hop ring, and the
+  coloured NSM ring, so hovering is never mistaken for any of those states.
+- Hovering never selects — clicking still does, exactly as before; hover is
+  purely an additional, non-committal layer on top of the existing click path.
+
 ## State management
 
 ```
@@ -499,6 +551,7 @@ colW, paneH: number                   // measured column box — see layout cons
 qThreshold: number | null             // null = follow the dataset's min (unfiltered) — see §8
 hideOrphanMrna: boolean               // default false — see §8
 viewTransform: { x, y, k }            // pan/zoom, shared across compare-mode canvases — see §4
+hoverA, hoverB: nodeId | null          // per-side hover emphasis, never synced — see §11
 activeDataset, compareDataset: string // dataset keys, kept distinct — see §9
 cornerTagShown, minimapShown: boolean // default true — independent overlay toggles, see §4
 datasetMeta: Record<key, { label, builtin: boolean }>  // dataset registry — see §10
