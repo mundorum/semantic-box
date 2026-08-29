@@ -1,0 +1,21 @@
+{
+  "artboards": [
+    { "file": "Before.dc.html", "x": 0, "y": 0, "w": 1240, "h": 720 },
+    { "file": "Main.dc.html", "x": 0, "y": 880, "w": 1240, "h": 360 },
+    { "file": "CompareMode.dc.html", "x": 0, "y": 1360, "w": 1240, "h": 410 },
+    { "file": "ViewMenu.dc.html", "x": 0, "y": 1890, "w": 1240, "h": 470 }
+  ],
+  "annotations": [
+    { "id": "n1", "x": 1320, "y": 10, "w": 280, "text": "TOP BAR — ~10 controls + 2 readouts crammed into a 52px strip that already wraps. The active dataset is shown three ways: the seg, the '◦ luminal-a' text, and (in compare) the vs-picker." },
+    { "id": "n2", "x": 1320, "y": 190, "w": 280, "text": "PANEL TOGGLES are scattered — rail + inspector sit in the top bar, trace tree sits in the toolbar. Three show/hide toggles, two regions, no grouping." },
+    { "id": "n3", "x": 1320, "y": 330, "w": 280, "text": "MODE is two Figtree-600 pills (.pill). Every other mode control in the app — Focus, Direction — is a mono segmented control. Two idioms for the same job." },
+    { "id": "n4", "x": 1320, "y": 460, "w": 280, "text": "COMPARE is fragmented: mode pill (top bar), vs-picker (top bar), Compare-by + specific/differential/common + synced badge (toolbar). Turning it on touches three places." },
+    { "id": "n5", "x": 1320, "y": 600, "w": 280, "text": "TOOLBAR — four unlabelled categories in one wrap row: subgraph query · canvas display · comparison · panel toggle. Under wrap the groups scramble." },
+    { "id": "n6", "x": 1320, "y": 895, "w": 280, "text": "TOP BAR now carries identity · dataset · mode only. Dataset shown once. Mode is a segmented control — the same idiom as Focus and Direction." },
+    { "id": "n7", "x": 1320, "y": 1025, "w": 280, "text": "VIEW cluster gathers every show/hide + reset behind one label, one idiom (toolbar-pill). A middle dot splits panels (rail·inspector·trace tree) from canvas overlays (labels·info band·minimap)." },
+    { "id": "n8", "x": 1320, "y": 1175, "w": 280, "text": "Hairline vertical rules mark the toolbar's cluster boundaries, so the groups stay legible when the row wraps. 'search & jump' is dimmed until it is wired." },
+    { "id": "n9", "x": 1320, "y": 1380, "w": 280, "text": "COMPARE mode: the vs-picker drops out of the top bar into a single COMPARE cluster with the metric picker, the specific/differential/common state and the synced badge — every compare control in one place, shown only while compare is on." },
+    { "id": "n10", "x": 1320, "y": 1905, "w": 280, "text": "VARIANT: the VIEW cluster collapses to one 'view ▾' popover — the tightest toolbar, at the cost of one extra click per toggle. Weigh against Main's always-visible cluster." }
+  ],
+  "launch": { "view": "canvas" }
+}
