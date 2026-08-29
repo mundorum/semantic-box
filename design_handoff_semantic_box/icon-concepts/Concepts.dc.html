@@ -1,0 +1,147 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    :root{
+      --ink:#201e1d; --accent:#c67139; --ground:#f5ead8; --surface:#ebddc5;
+      --n100:#f9f4ed; --n400:#c0b6a5; --n600:#82796a; --n700:#645c50;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0; background:var(--ground); color:var(--ink);
+      font:400 14px/1.5 'Figtree',system-ui,sans-serif; -webkit-font-smoothing:antialiased;}
+    a{color:#b45309;} a:hover{color:#92400e;}
+    h1{margin:0; font-weight:700;}
+    .mono{font-family:'JetBrains Mono',monospace;}
+    .eyebrow{font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.13em;
+      text-transform:uppercase; color:var(--n600);}
+    .grid{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:20px;}
+    .card{display:flex; flex-direction:column; border:1px solid var(--n400);
+      border-radius:8px; background:var(--surface); overflow:hidden;}
+    .card__art{padding:26px; display:flex; justify-content:center;}
+    .card__body{padding:0 16px 16px; display:flex; flex-direction:column; gap:6px;}
+    .card__name{font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:500;}
+    .card__note{font-size:11.5px; line-height:1.5; color:var(--n700);}
+    .card__foot{margin-top:auto; border-top:1px solid var(--n400); background:#fff;
+      padding:10px 16px; display:flex; align-items:center; gap:14px;}
+    .card__foot .mono{font-size:9px; color:var(--n600); margin-left:auto;}
+    .reco{display:inline-flex; align-items:center; gap:6px; align-self:flex-start;
+      font-family:'JetBrains Mono',monospace; font-size:9px; letter-spacing:.06em;
+      text-transform:uppercase; color:var(--accent); border:1px solid var(--accent);
+      background:#fff2eb; padding:3px 7px; border-radius:999px;}
+  </style>
+</helmet>
+
+<div style="padding:40px; display:flex; flex-direction:column; gap:24px;">
+
+  <div style="display:flex; flex-direction:column; gap:8px;">
+    <div class="eyebrow">Semantic Box &middot; earlier directions</div>
+    <h1 style="font-size:21px;">Directions considered</h1>
+    <p style="margin:0; font-size:12.5px; color:var(--n700); max-width:88ch;">
+      The first-round sketches. The <strong>Shape trio</strong> idea &mdash; circle, box, diamond
+      as a connected graph &mdash; was carried forward and set on the face of a cardboard box for
+      the final mark (see the <strong>Final mark</strong> page). The rest are kept here for
+      reference. All Organic chrome palette only, no spectral node-class hue.
+    </p>
+  </div>
+
+  <div class="grid">
+
+    <!-- 1 -->
+    <div class="card">
+      <div class="card__art">
+        <svg width="78" height="78" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><circle cx="12" cy="12" r="8" stroke="#c67139" stroke-width="1.4" opacity=".28"/><circle cx="12" cy="12" r="5" stroke="#c67139" stroke-width="1.7" opacity=".6"/><circle cx="12" cy="12" r="2.4" fill="#c67139" stroke="none"/></svg>
+      </div>
+      <div class="card__body">
+        <span class="card__name">Focus box</span>
+        <span class="card__note">The hop-decay mechanic as a mark &mdash; a selected node,
+          relevance fading outward. Rings are the real decay curve. Holds up best at 16&thinsp;px.</span>
+      </div>
+      <div class="card__foot">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><circle cx="12" cy="12" r="8" stroke="#c67139" stroke-width="1.4" opacity=".28"/><circle cx="12" cy="12" r="5" stroke="#c67139" stroke-width="1.7" opacity=".6"/><circle cx="12" cy="12" r="2.4" fill="#c67139" stroke="none"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><circle cx="12" cy="12" r="5" stroke="#c67139" stroke-width="1.9" opacity=".6"/><circle cx="12" cy="12" r="2.6" fill="#c67139" stroke="none"/></svg>
+        <span class="mono">32 &middot; 16</span>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="card">
+      <div class="card__art">
+        <svg width="78" height="78" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><line x1="8.6" y1="15.4" x2="14.8" y2="9"/><circle cx="8" cy="16" r="2.3" fill="#201e1d" stroke="none"/><circle cx="15.4" cy="8.6" r="3" fill="#c67139" stroke="none"/></svg>
+      </div>
+      <div class="card__body">
+        <span class="card__name">Boxed graph</span>
+        <span class="card__note">The literal name: a container holding a connected pair.
+          Warmest reading, and unmistakably &ldquo;a graph tool.&rdquo;</span>
+      </div>
+      <div class="card__foot">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><line x1="8.6" y1="15.4" x2="14.8" y2="9"/><circle cx="8" cy="16" r="2.3" fill="#201e1d" stroke="none"/><circle cx="15.4" cy="8.6" r="3" fill="#c67139" stroke="none"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><line x1="8.6" y1="15.4" x2="14.8" y2="9"/><circle cx="8" cy="16" r="2.6" fill="#201e1d" stroke="none"/><circle cx="15.4" cy="8.6" r="3.2" fill="#c67139" stroke="none"/></svg>
+        <span class="mono">32 &middot; 16</span>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="card">
+      <div class="card__art">
+        <svg width="78" height="78" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="9.5" width="11.5" height="11.5" rx="2.5"/><rect x="6.25" y="6.25" width="11.5" height="11.5" rx="2.5" fill="#f5ead8"/><rect x="10" y="3" width="11.5" height="11.5" rx="2.5" fill="#f5ead8"/><line x1="13.7" y1="10.3" x2="17.6" y2="6.4"/><circle cx="13.7" cy="10.3" r="1.5" fill="#201e1d" stroke="none"/><circle cx="17.6" cy="6.4" r="1.9" fill="#c67139" stroke="none"/></svg>
+      </div>
+      <div class="card__body">
+        <span class="card__name">Layer stack</span>
+        <span class="card__note">Offset frames &mdash; the source &rarr; co-occurrence &rarr;
+          inference &rarr; clustering build. About how the graph is made here.</span>
+      </div>
+      <div class="card__foot">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="9.5" width="11.5" height="11.5" rx="2.5"/><rect x="6.25" y="6.25" width="11.5" height="11.5" rx="2.5" fill="#f5ead8"/><rect x="10" y="3" width="11.5" height="11.5" rx="2.5" fill="#f5ead8"/><line x1="13.7" y1="10.3" x2="17.6" y2="6.4"/><circle cx="13.7" cy="10.3" r="1.5" fill="#201e1d" stroke="none"/><circle cx="17.6" cy="6.4" r="1.9" fill="#c67139" stroke="none"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="9.5" width="11.5" height="11.5" rx="2.5"/><rect x="6.25" y="6.25" width="11.5" height="11.5" rx="2.5" fill="#f5ead8"/><rect x="10" y="3" width="11.5" height="11.5" rx="2.5" fill="#f5ead8"/></svg>
+        <span class="mono">32 &middot; 16</span>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="card">
+      <div class="card__art">
+        <svg width="78" height="78" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><circle cx="8" cy="8.8" r="2.4" fill="#201e1d" stroke="none"/><rect x="13" y="6.4" width="5" height="5" rx="1.1" fill="#c67139" stroke="none"/><path d="M12 12.9 l3.1 3.1 -3.1 3.1 -3.1 -3.1 z" fill="#201e1d" stroke="none"/></svg>
+      </div>
+      <div class="card__body">
+        <span class="reco">carried forward</span>
+        <span class="card__name">Shape trio</span>
+        <span class="card__note">Circle, box, diamond &mdash; the class-encoding vocabulary,
+          enclosed. Reads &ldquo;typed nodes&rdquo; before anything else. Became the graph on the
+          box face in the final mark.</span>
+      </div>
+      <div class="card__foot">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><circle cx="8" cy="8.8" r="2.4" fill="#201e1d" stroke="none"/><rect x="13" y="6.4" width="5" height="5" rx="1.1" fill="#c67139" stroke="none"/><path d="M12 12.9 l3.1 3.1 -3.1 3.1 -3.1 -3.1 z" fill="#201e1d" stroke="none"/></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><circle cx="8" cy="8.8" r="2.7" fill="#201e1d" stroke="none"/><rect x="12.6" y="6" width="5.6" height="5.6" rx="1.1" fill="#c67139" stroke="none"/><path d="M12 12.6 l3.4 3.4 -3.4 3.4 -3.4 -3.4 z" fill="#201e1d" stroke="none"/></svg>
+        <span class="mono">32 &middot; 16</span>
+      </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="card">
+      <div class="card__art">
+        <svg width="78" height="78" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4.5" fill="#c67139"/><text x="12" y="16.3" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="10.5" font-weight="500" fill="#f5ead8">sb</text></svg>
+      </div>
+      <div class="card__body">
+        <span class="card__name">Monogram &nbsp;sb</span>
+        <span class="card__note">&ldquo;sb&rdquo; in JetBrains Mono on an accent tile.
+          Extends the mono wordmark instead of adding a picture. Falls back to system mono in PNG/PDF export.</span>
+      </div>
+      <div class="card__foot">
+        <svg width="32" height="32" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4.5" fill="#c67139"/><text x="12" y="16.3" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="10.5" font-weight="500" fill="#f5ead8">sb</text></svg>
+        <svg width="16" height="16" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="4.5" fill="#c67139"/><text x="12" y="16.6" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="11" font-weight="500" fill="#f5ead8">sb</text></svg>
+        <span class="mono">32 &middot; 16</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
