@@ -234,14 +234,15 @@ they stay legible when the row wraps.
 
 - `Compare` section label, then `vs` + a dataset `<select>` (`.nsm-select`) choosing side B / the Alignment tab's B (`compareDataset` — §9).
 - `by` + a metric `<select>` (`.nsm-select`) — the NSM (node-specificity-by-metric) picker; first option is `off`. When a metric is chosen, a `specific` / `conserved` / `rewired` segmented control follows, and — for `conserved` / `rewired` only — a `split` Jaccard-cutoff slider (`.nsm-jaccard`, native `input[type=range]` 0–1, `accent-color: var(--color-accent)`, with a `J ≥ N.NN` readout). See §4 for what `conserved` / `rewired` mean and why the cutoff is user-set.
-- `Reach` — an `off` / `shared` / `unique` segmented control (`reachOp`), the reach set comparison (§13). Compare-only; reset to `off` by `showLayers` alongside `nsmMetric`.
+- `Reach` — an `off` / `intersection` / `difference` segmented control (`reachOp`), the reach set comparison (§13). The two set-op labels are spelled out in full (rather than `shared` / `unique`) so they don't read as another spelling of the NSM `shared` classification beside them. Compare-only; reset to `off` by `showLayers` alongside `nsmMetric`.
 - Compare-mode badge — now a bare `⛓` glyph (`.compare-badge.compare-badge--icon`), same `1px solid #c67139` / `background:#fff2eb` pill, with the former copy (`pan, zoom, active layer and selection stay in sync across both canvases`) moved to its `title` tooltip. It was a full-width label; the sync it announces is real (§4) but the text was crowding the cluster, so it shrank to its icon.
 - NSM is a cross-dataset feature, so it lives here and nowhere else. `showLayers` sets `nsmMetric = 'none'` on the way out, or nodes keep the NSM label/ring treatment with no visible control to clear it.
 
-**Spacer**, then — when `hiddenCount > 0` — the **`hidden (N) ▾` menu** (§14), then the **`view` menu** (right-aligned) — a `toolbar-pill` `view ▾` with the overlay-active idiom, opening a popover (§12) that gathers every show/hide + reset:
+**Spacer**, then — when `hiddenCount > 0` — the **`hidden (N) ▾` menu** (§14), then the **`view` menu** (right-aligned) — a `toolbar-pill` `view ▾` with the overlay-active idiom, opening a popover (§12) that gathers every show/hide + filter + reset:
 
 - Panels: `rail`, `inspector`, `trace tree` — checkbox rows (`toggleRail` / `toggleInspector` / `toggleTree`). The tick reflects the *shown* state, so `trace tree` reads unchecked at `colW < 640` even when wanted.
 - Canvas overlays: `labels`, `info band`, `minimap` (`toggleLabels` / `toggleCornerTag` / `toggleMinimap`). Default all on. They exist because on a dense layout an overlay can sit on top of graph content the user needs.
+- Canvas filters: `terminal nodes` (`toggleNoDownstream`) — a checkbox row whose tick means *shown* (checked when `!hideNoDownstream`), like the overlay rows. Unchecking it drops every node with no outgoing edge in the current filtered graph — pathway sinks and anything the class / q-value / orphan filters left with only incoming edges. Single pass, not iterated to a fixpoint (see §8-adjacent note / `computeView`). Default shown.
 - `reset pan & zoom` — action row, no checkbox (`resetView`).
 
 Squashed notice (when the trace pane is wanted but the window is too narrow), right after the `view` menu — `1px dashed #c0b6a5`, JetBrains Mono 400 9px, `--color-neutral-600`. Copy: `trace pane needs a wider window`.
@@ -372,7 +373,7 @@ clickable → select. Unmatched B shows `—` and Δ shows `A only`.
 - **Hops** — 1/2/3, sets BFS depth.
 - **Direction** — `down` follows outgoing edges only; `up` follows incoming edges only; `both` follows both. Affects BFS, which of the inspector's outgoing/incoming groups render, and nothing else (the tree is always outgoing).
 - **Mode** — `layers` / `compare` segmented control in the top bar. `showLayers` also clears `nsmMetric` and moves the inspector off `Alignment`; `showCompare` selects the `Alignment` tab. Both reset `railOpen` / `inspectorOpen` to their mode defaults.
-- **View menu** — a toolbar popover (§12) toggling the three side panels (rail, inspector, trace tree) and the three canvas overlays (labels, info band, minimap), plus a reset-pan/zoom action. Dismiss: click the scrim, or resize the window.
+- **View menu** — a toolbar popover (§12) toggling the three side panels (rail, inspector, trace tree), the three canvas overlays (labels, info band, minimap), and the `terminal nodes` canvas filter (hide nodes with no downstream edge), plus a reset-pan/zoom action. Dismiss: click the scrim, or resize the window.
 - **Class toggle** — removes that class from the view; layer counts, node counts and edges recompute.
 - **Layer visibility / opacity / active** — active layer sets the ceiling: nodes and edges with `layer > active` are excluded. Per-layer opacity multiplies into node and edge alpha.
 - **Tree expand/collapse** — per-row toggles stored by path key; expand/collapse-all resets toggles and moves the base depth.
@@ -574,11 +575,13 @@ the user commits to a click.
 
 §10's modal was the first departure from "reuse an existing idiom." The `view`
 menu is the second: a lightweight **popover** hung off a `toolbar-pill`. It
-exists because five separate show/hide toggles (rail, inspector, trace tree) plus
-three canvas-overlay toggles plus `reset view` had spread across the top bar and
-the toolbar with no grouping — the "too many peer controls" problem this pass set
-out to fix. Gathering them behind one `view ▾` pill trades a click for a much
-quieter toolbar; they're all infrequent, so that's the right trade. Which
+exists because the show/hide toggles (rail, inspector, trace tree), the
+canvas-overlay toggles (labels, info band, minimap) and `reset view` had spread
+across the top bar and the toolbar with no grouping — the "too many peer
+controls" problem this pass set out to fix. Gathering them behind one `view ▾`
+pill trades a click for a much quieter toolbar; they're all infrequent, so
+that's the right trade. Later low-frequency canvas controls land here too (the
+`terminal nodes` filter — §3). Which
 consolidation to use here was an explicit product decision — an always-visible
 inline cluster was the alternative; the popover won on "reduces the crowded
 perception."
@@ -586,9 +589,9 @@ perception."
 It still reads as Organic chrome: it borrows the modal's surface tokens (cream
 `--color-bg` ground, `--radius-sm`, `--shadow-lg`) and the layer card's
 visibility-toggle idiom (12px square, `--color-accent` fill when on) for the
-checkbox rows. Section headers (`Panels` / `Canvas overlays`) use the standard
-`.08em` uppercase mono. `reset pan & zoom` is an action row (top divider, no
-checkbox).
+checkbox rows. Section headers (`Panels` / `Canvas overlays` / `Canvas filters`)
+use the standard `.08em` uppercase mono. `reset pan & zoom` is an action row
+(top divider, no checkbox).
 
 - **Anatomy**: `.view-menu` (relative anchor) › `toolbar-pill` trigger, taking
   the overlay-active span while open › `.view-menu__scrim`
@@ -602,8 +605,9 @@ checkbox).
 - **Below the modal**: the modal scrim is `z-index:50`, above this menu's 40/41.
 - **Checkbox truth**: each tick binds to the *effective shown* state (`railShown`
   / `inspectorShown` / `treeShown` / `labels` / `cornerTagShown` /
-  `minimapShown`), not a raw wanted-flag — so `trace tree` reads unchecked at
-  `colW < 640` even when `treeWanted`.
+  `minimapShown`, and `!hideNoDownstream` for `terminal nodes`), not a raw
+  wanted-flag — so `trace tree` reads unchecked at `colW < 640` even when
+  `treeWanted`.
 
 ### 13. Reach set comparison (compare mode)
 
@@ -613,11 +617,15 @@ node — `view.dist` / `viewB.dist`, respecting the current `Hops` (1/2/3) and
 narrows both subgraphs to a set operation over those two reachable sets:
 
 - `off` (default) — no change.
-- `shared` (intersection) — on **both** canvases, only nodes the selection
-  reaches on **both** sides stay in the highlighted subgraph.
-- `unique` (difference) — **symmetric per canvas**: the left canvas keeps
+- `intersection` — on **both** canvases, only nodes the selection reaches on
+  **both** sides stay in the highlighted subgraph.
+- `difference` — **symmetric per canvas**: the left canvas keeps
   `reach(A) \ reach(B)`, the right keeps `reach(B) \ reach(A)`. Each side shows
   what only *it* reaches.
+
+(These were labelled `shared` / `unique` in an earlier pass; renamed to the
+literal set operations so they don't collide with the NSM `shared`
+classification sitting in the same cluster.)
 
 The **selected node itself is always kept** (it is `dist 0` on every side; the
 op never excludes it), and on a side where the selection has no counterpart the
@@ -634,7 +642,7 @@ would be ring soup. Implementation: `computeNodesFor` / `computeEdgesFor` take
 the other side's `dist` as a 4th/2nd argument and fold a `reachExcluder(v,
 otherDist)` predicate into the `sub` / `both` test — the whole downstream
 render (opacity, hop ring, label rule, `filter`-mode skip) already keys off
-those. The corner tag gains ` · reach shared` / ` · reach unique` when active.
+those. The corner tag gains ` · reach intersection` / ` · reach difference` when active.
 
 `reachOp` is compare-only and reset to `'off'` by `showLayers` (like
 `nsmMetric`), so a stale narrowing can't outlive the mode that has a control
@@ -703,6 +711,7 @@ query: string                         // search box (unwired)
 colW, paneH: number                   // measured column box — see layout constraint
 qThreshold: number | null             // null = follow the dataset's max (unfiltered) — see §8
 hideOrphanMrna: boolean               // default false — see §8
+hideNoDownstream: boolean             // view-menu "terminal nodes" filter; default false (shown) — see §3/§12
 viewTransform: { x, y, k }            // pan/zoom, shared across compare-mode canvases — see §4
 hoverA, hoverB: nodeId | null          // per-side hover emphasis, never synced — see §11
 activeDataset, compareDataset: string // dataset keys, kept distinct — see §9

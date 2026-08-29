@@ -210,6 +210,11 @@
               <button class="view-menu__row" @click="toggleMinimap">
                 <span class="view-menu__chk" :class="{ 'view-menu__chk--on': minimapShown }"></span>minimap
               </button>
+              <div class="view-menu__group">Canvas filters</div>
+              <button class="view-menu__row" @click="toggleNoDownstream"
+                      title="hide nodes with no downstream (outgoing) connections — pathway sinks and other dead ends">
+                <span class="view-menu__chk" :class="{ 'view-menu__chk--on': !hideNoDownstream }"></span>terminal nodes
+              </button>
               <button class="view-menu__row view-menu__row--action" @click="resetView">reset pan &amp; zoom</button>
             </div>
           </div>

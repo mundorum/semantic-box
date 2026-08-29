@@ -81,6 +81,12 @@ createApp({
       // dangling edges.
       hideOrphanMrna: false,
 
+      // "Terminal nodes" view toggle (view menu). When true, any node with no
+      // outgoing edge in the current filtered graph is dropped — pathway sinks
+      // and anything left dangling by the other filters. Single pass by
+      // design — see computeView. Default false = shown.
+      hideNoDownstream: false,
+
       // Canvas pan/zoom. Shared by both canvases in compare mode — matches
       // the "synced pan · zoom" claim already made by the compare-mode badge.
       viewTransform: { x: 0, y: 0, k: 1 },
@@ -225,7 +231,7 @@ createApp({
         selected: this.selected, hop: this.hop, dir: this.dir,
         active: this.active, vis: this.vis, cls: this.cls,
         qThreshold: this.effectiveQThreshold, hideOrphanMrna: this.hideOrphanMrna,
-        hidden: this.hidden,
+        hideNoDownstream: this.hideNoDownstream, hidden: this.hidden,
       });
     },
 
@@ -247,7 +253,7 @@ createApp({
     // selection, in compare mode, when the op isn't 'off'.
     reachSuffix() {
       if (!this.isCompare || !this.selected || this.reachOp === 'off') return '';
-      return ' · reach ' + (this.reachOp === 'intersection' ? 'shared' : 'unique');
+      return ' · reach ' + this.reachOp;
     },
 
     cornerTag() {
@@ -323,7 +329,7 @@ createApp({
         selected: this.selected, hop: this.hop, dir: this.dir,
         active: this.active, vis: this.vis, cls: this.cls,
         qThreshold: this.effectiveQThreshold, hideOrphanMrna: this.hideOrphanMrna,
-        hidden: this.hidden,
+        hideNoDownstream: this.hideNoDownstream, hidden: this.hidden,
       });
     },
 
@@ -508,8 +514,8 @@ createApp({
     reachOptions() {
       return [
         { key: 'off', label: 'off', title: 'no reach comparison' },
-        { key: 'intersection', label: 'shared', title: 'only nodes the selection reaches on BOTH canvases' },
-        { key: 'difference', label: 'unique', title: 'only nodes the selection reaches on THIS canvas but not the other' },
+        { key: 'intersection', label: 'intersection', title: 'only nodes the selection reaches on BOTH canvases' },
+        { key: 'difference', label: 'difference', title: 'only nodes the selection reaches on THIS canvas but not the other' },
       ];
     },
 
@@ -952,6 +958,7 @@ createApp({
     toggleTree() { this.treeWanted = !this.treeWanted; },
     toggleCornerTag() { this.cornerTagShown = !this.cornerTagShown; },
     toggleMinimap() { this.minimapShown = !this.minimapShown; },
+    toggleNoDownstream() { this.hideNoDownstream = !this.hideNoDownstream; },
 
     setNsmMetric(key) { this.nsmMetric = key; },
     setNsmState(state) { this.nsmState = state; },

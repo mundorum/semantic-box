@@ -162,6 +162,21 @@ function computeView(model, state) {
     edges = edges.filter(e => live[e.s] && live[e.t]);
   }
 
+  // "Terminal nodes" view toggle: drop every node with no outgoing edge in the
+  // current filtered graph — the Pathway sinks, plus anything the class /
+  // q-value / orphan filters left with only incoming edges. Deliberately a
+  // SINGLE pass: iterating to a fixpoint would peel every path back through
+  // its source (in a tripartite miR -> mRNA -> Pathway graph every path ends
+  // at a sink) and collapse the graph to nothing.
+  if (state.hideNoDownstream) {
+    const hasOut = {};
+    edges.forEach(e => { hasOut[e.s] = true; });
+    nodes = nodes.filter(n => hasOut[n.id]);
+    live = {};
+    nodes.forEach(n => { live[n.id] = n; });
+    edges = edges.filter(e => live[e.s] && live[e.t]);
+  }
+
   const out = {}, inn = {}, deg = {};
   edges.forEach(e => {
     (out[e.s] = out[e.s] || []).push(e);
