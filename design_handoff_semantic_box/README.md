@@ -154,19 +154,30 @@ initial node selection happens in a **lifecycle hook** (`componentDidMount` +
 `background: var(--color-surface,#ebddc5)`, bottom divider, `padding: 0 16px`,
 `display:flex; align-items:center; gap:10px`.
 
+The top bar carries **identity, dataset, and mode only**. Panel and
+canvas-overlay toggles live in the toolbar's `view` menu (§3, §12); compare's
+sub-controls live in the toolbar's Compare cluster (§3). Left to right:
+
 - Wordmark `semantic box` — JetBrains Mono 500 12px, `letter-spacing:.08em`, uppercase.
-- Dataset label — JetBrains Mono 400 11px, `--color-neutral-600` (#82796a). Copy: `◦ clinical KG · run 12`.
-- Spacer, then right-aligned:
+- Dataset **segmented control** — one option per loaded dataset, `dsLabel(key)`
+  copy (§9). Selecting one is `setDataset` (resets selection / tree / q-threshold).
+- `manage graphs` — `toolbar-pill`, opens the modal (§10).
+- Load-error text, when a dataset fails to load — JetBrains Mono 400 11px, `--color-accent-800`.
+- Spacer.
 - Search input — 170px wide, `padding:7px 11px`, `border:1px solid #c0b6a5`,
   `border-radius:999px`, `background:#f9f4ed`, JetBrains Mono 400 11px.
   Placeholder: `search & jump`. **Not yet wired** — state exists, filtering isn't implemented. Implement as jump-to-node.
-- `Layers` / `Compare` buttons — pill, `padding:8px 15px`, `border:1px solid #c0b6a5`,
-  transparent bg, Figtree 600 12px. Hover: `border-color:#c67139`.
-  Active state is an **overlay span** at `inset:-1px` with `1.5px solid #c67139` +
-  `background:#fff2eb`, label above it at `position:relative`.
+- Hairline rule (`.bar-rule` — 1px × 20px, `--color-divider`, `align-self:center`).
+- `mode` label + **segmented control** `layers` / `compare`. This was two
+  Figtree-600 pills; it is now a mono `seg`, the same idiom as Focus / Direction,
+  so every mode switch in the app looks the same. `showLayers` / `showCompare`;
+  leaving compare also clears `nsmMetric` (§3). There is no standalone
+  dataset-label readout any more — the segmented control is the single source of
+  that truth.
 
-> The overlay-span pattern for active/selected states recurs throughout. It exists
-> so the border thickening doesn't shift layout. In your framework a simple
+> The overlay-span pattern for active/selected states recurs throughout (rail,
+> toolbar, tree, inspector, the `view` pill). It exists so the border thickening
+> doesn't shift layout. In your framework a simple
 > `box-shadow: inset 0 0 0 1.5px` or an `::after` is equivalent and cleaner — use
 > whatever your codebase prefers, as long as **the active state never reflows**.
 
@@ -210,17 +221,29 @@ in `#c67139` at the decay alpha for that hop, plus JetBrains Mono 400 10px label
 
 `padding:8px 12px`, `display:flex; flex-wrap:wrap; gap:8px`, bottom divider.
 Section labels are JetBrains Mono 500 9px, `.06em`, uppercase, `--color-neutral-600`.
+Clusters are separated by a hairline `.bar-rule` (1px × 20px, `--color-divider`) so
+they stay legible when the row wraps.
+
+**Subgraph cluster** — the query that defines the highlighted neighbourhood:
 
 - `Focus` segmented control — `none` / `highlight` / `filter`. Track: `padding:2px`, `1px solid #c0b6a5`, `999px`, `background:#f9f4ed`. Option: `padding:5px 11px`, JetBrains Mono 500 10px. Selected: `999px` fill `#c67139`, ink `#f9f4ed`; unselected ink `--color-neutral-700`. Default `highlight`.
 - `Hops` segmented control — `1` / `2` / `3`, each option 26px wide. Default `2`.
 - `Direction` segmented control — three options, not a toggle: `→ down` (downstream only — follow outgoing edges), `← up` (upstream only — follow incoming edges), `⇄ both`. Default `→ down`. Affects BFS (see below), the inspector's outgoing/incoming neighbour groups (each group shows only when the current direction includes it — outgoing hidden in `up`, incoming hidden in `down`, both shown in `both`), and the `nodeMetrics` "trace direction" readout. The trace tree is unaffected — it is always outgoing, regardless of this control.
-- Labels toggle — pill. Labels: `labels on` / `labels off`. Default on.
-- `reset view` pill — resets pan/zoom to identity (see "Pan & zoom" below).
-- `info band` / `minimap` toggle pills — independently show/hide the corner tag and the minimap (see below). Default both on. Exists because on a dense layout either overlay can sit on top of graph content the user needs to see.
-- Spacer.
-- Compare-mode badge (compare only) — `1px solid #c67139`, `background:#fff2eb`, ink `--color-accent-700`. Copy: `⛓ synced pan · zoom · layer · selection`.
-- `trace tree` toggle — pill with overlay active state.
-- Squashed notice (when the pane is wanted but the window is too narrow) — `1px dashed #c0b6a5`, JetBrains Mono 400 9px, `--color-neutral-600`. Copy: `pane needs a wider window`.
+
+**Compare cluster** — rendered **only in compare mode** (`v-if="isCompare"`), after a hairline rule:
+
+- `Compare` section label, then `vs` + a dataset `<select>` (`.nsm-select`) choosing side B / the Alignment tab's B (`compareDataset` — §9).
+- `by` + a metric `<select>` (`.nsm-select`) — the NSM (node-specificity-by-metric) picker; first option is `off`. When a metric is chosen, a `specific` / `differential` / `common` segmented control follows.
+- Compare-mode badge — `1px solid #c67139`, `background:#fff2eb`, ink `--color-accent-700`. Copy: `⛓ synced pan · zoom · layer · selection`.
+- NSM is a cross-dataset feature, so it lives here and nowhere else. `showLayers` sets `nsmMetric = 'none'` on the way out, or nodes keep the NSM label/ring treatment with no visible control to clear it.
+
+**Spacer**, then the **`view` menu** (right-aligned) — a `toolbar-pill` `view ▾` with the overlay-active idiom, opening a popover (§12) that gathers every show/hide + reset:
+
+- Panels: `rail`, `inspector`, `trace tree` — checkbox rows (`toggleRail` / `toggleInspector` / `toggleTree`). The tick reflects the *shown* state, so `trace tree` reads unchecked at `colW < 640` even when wanted.
+- Canvas overlays: `labels`, `info band`, `minimap` (`toggleLabels` / `toggleCornerTag` / `toggleMinimap`). Default all on. They exist because on a dense layout an overlay can sit on top of graph content the user needs.
+- `reset pan & zoom` — action row, no checkbox (`resetView`).
+
+Squashed notice (when the trace pane is wanted but the window is too narrow), right after the `view` menu — `1px dashed #c0b6a5`, JetBrains Mono 400 9px, `--color-neutral-600`. Copy: `trace pane needs a wider window`.
 
 ### 4. Centre — canvas
 
@@ -232,12 +255,12 @@ See the two-palette section for ground, grid, hairline, node and edge colour.
 - **Node opacity**: `decayAlpha[min(hop,3)] × (layerOpacity/100)`. Nodes outside the subgraph go to `0.1` (or are removed entirely in `filter` mode).
 - **Labels** (when labels are on): shown for the selected node, any node at hop ≤ 2, and **always** for `case` nodes. JetBrains Mono, 11px selected / 9px otherwise, `fill: #201e1d`, `fillOpacity: max(op, 0.55)`, `pointer-events:none`. (Raised from hop ≤ 1 to hop ≤ 2 — with the tripartite dataset, a 2-hop BFS from a MicroRNA node reaches its Pathways only at hop 2, and those were going unlabelled even though the hop-ring and edges already made them visually part of the subgraph.)
   Placement measures the string (mono advance ≈ 0.6em → `len × 6.6` selected, `× 5.4` otherwise) and draws right of the node by default; **flips to the left only if the flipped position also fits**, and both branches clamp inside the box (6px inset) so labels never run off either edge.
-  **NSM mode** (`Compare by` metric ≠ off) normally replaces this rule with "only NSM-marked nodes get a label," so a few hundred faded genes don't bury the handful that matter for the metric. But that restriction must be scoped **per node class**, not applied globally: check it against `nsmMarkableClasses` — the set of classes that have *any* non-null `n.nsm[metricKey]` entry anywhere in either loaded dataset — and only suppress the normal label rule for a node whose own class is in that set. NSM analysis today is computed exclusively for MicroRNA (see `js/data-loader.js` — Messenger RNA and Pathway rows always parse to `[]`/`null`), so `nsmMarkableClasses` never contains those two classes; a node of either class keeps the ordinary "selected + hop ≤ 2" label rule regardless of whether Compare By is on. Getting this wrong — checking "does *any* mark exist anywhere" instead of "can *this node's class* ever be marked" — reads as: turn on any metric, and every Messenger RNA and Pathway label vanishes instantly, permanently, for as long as Compare By stays on, even though they're still visibly part of the highlighted subgraph (hop rings, edges, opacity all still show it). The `examples/old/luminal-{a,b}_nodes.csv` files (kept in the repo for testing only, not wired into the app's dataset list) carry the real NSM columns and per-node metrics, and are the only current fixture that exercises this path — upload them via "manage graphs" (§10) to test Compare By against real data. Every dataset actually shipped for normal use has no NSM data at all, which is exactly why this bug was invisible until Compare By was tested against a dataset that actually has metrics.
+  **NSM mode** (`by` metric ≠ `off` in the compare-mode Compare cluster — §3) normally replaces this rule with "only NSM-marked nodes get a label," so a few hundred faded genes don't bury the handful that matter for the metric. But that restriction must be scoped **per node class**, not applied globally: check it against `nsmMarkableClasses` — the set of classes that have *any* non-null `n.nsm[metricKey]` entry anywhere in either loaded dataset — and only suppress the normal label rule for a node whose own class is in that set. NSM analysis today is computed exclusively for MicroRNA (see `js/data-loader.js` — Messenger RNA and Pathway rows always parse to `[]`/`null`), so `nsmMarkableClasses` never contains those two classes; a node of either class keeps the ordinary "selected + hop ≤ 2" label rule regardless of whether Compare By is on. Getting this wrong — checking "does *any* mark exist anywhere" instead of "can *this node's class* ever be marked" — reads as: turn on any metric, and every Messenger RNA and Pathway label vanishes instantly, permanently, for as long as Compare By stays on, even though they're still visibly part of the highlighted subgraph (hop rings, edges, opacity all still show it). The `examples/old/luminal-{a,b}_nodes.csv` files (kept in the repo for testing only, not wired into the app's dataset list) carry the real NSM columns and per-node metrics, and are the only current fixture that exercises this path — upload them via "manage graphs" (§10) to test Compare By against real data. Every dataset actually shipped for normal use has no NSM data at all, which is exactly why this bug was invisible until Compare By was tested against a dataset that actually has metrics.
 - Clicking a node selects it; clicking bare SVG background clears the selection.
-- **Corner tag** — top-left pill, `1px solid divider`, `background:#f9f4ed`, JetBrains Mono 400 10px, `--color-neutral-700`, ellipsised. Reads `L3 · clustered · 118 n · 190 e · focus highlight · 2 hop`; in compare mode prefixed `A · ` / `B · `. Hideable via the `info band` toolbar pill — it can sit on top of nodes near the top-left corner on a dense layout.
-- **Minimap** — bottom-right, 104×68, `radius 6px`, `1px solid #c0b6a5`, `background:#f9f4ed`, containing a viewport rect, `1px solid #c67139`, `radius 3px`. Wired to the real pan/zoom transform: rect `left/top/width/height` are `-panX/k`, `-panY/k`, `100/k`, `100/k` percent of the canvas box. `overflow:hidden` on the minimap crops the rect when panned/zoomed past the edge rather than letting it escape the box. Hideable via the `minimap` toolbar pill, independently of the corner tag — same rationale.
+- **Corner tag** — top-left pill, `1px solid divider`, `background:#f9f4ed`, JetBrains Mono 400 10px, `--color-neutral-700`, ellipsised. Reads `L3 · clustered · 118 n · 190 e · focus highlight · 2 hop`; in compare mode prefixed `A · ` / `B · `. Hideable via the `view` menu's `info band` row — it can sit on top of nodes near the top-left corner on a dense layout.
+- **Minimap** — bottom-right, 104×68, `radius 6px`, `1px solid #c0b6a5`, `background:#f9f4ed`, containing a viewport rect, `1px solid #c67139`, `radius 3px`. Wired to the real pan/zoom transform: rect `left/top/width/height` are `-panX/k`, `-panY/k`, `100/k`, `100/k` percent of the canvas box. `overflow:hidden` on the minimap crops the rect when panned/zoomed past the edge rather than letting it escape the box. Hideable via the `view` menu's `minimap` row, independently of the corner tag — same rationale.
 
-- **Pan & zoom** — implemented. Mouse wheel zooms anchored on the pointer (clamped `0.5×`–`8×`); click-drag pans. Both live as a single `{x, y, k}` transform applied via an SVG `<g transform="translate(x,y) scale(k)">` wrapping the edges/nodes/labels, so labels and stroke widths scale with content (standard SVG behaviour — no `vector-effect` correction applied). A `reset view` toolbar pill resets the transform to identity. In compare mode the transform is a single shared value driving both canvases — this is what makes the existing "synced pan · zoom" compare-badge copy true rather than aspirational.
+- **Pan & zoom** — implemented. Mouse wheel zooms anchored on the pointer (clamped `0.5×`–`8×`); click-drag pans. Both live as a single `{x, y, k}` transform applied via an SVG `<g transform="translate(x,y) scale(k)">` wrapping the edges/nodes/labels, so labels and stroke widths scale with content (standard SVG behaviour — no `vector-effect` correction applied). The `reset pan & zoom` row in the `view` menu resets the transform to identity. In compare mode the transform is a single shared value driving both canvases — this is what makes the existing "synced pan · zoom" compare-badge copy true rather than aspirational.
 
   **Do not use `setPointerCapture` on the pan-handling element.** Per the Pointer Events spec, capturing a pointer retargets its subsequent *compatibility mouse events* — including `click` — to the capturing element too. Since node selection relies on a `@click` bound directly to each node's own SVG shape, capturing on the wrapping `.canvas` div silently swallows every node click once a drag has been armed (pointerdown always arms it, even for a plain click). Track the drag via `window`-level `pointermove`/`pointerup` listeners added on `pointerdown` and removed on `pointerup` instead — this keeps tracking the pointer outside the element's bounds without touching event targeting. Disambiguate a pan from a click with a small movement threshold (~3px in canvas units) recorded on a `_dragMoved` flag, checked by both the node click handler and the background-click handler (`svgClick`) — a background click also must not fire immediately after a pan that happens to release over empty canvas.
 
@@ -254,9 +277,9 @@ Decay curves (opacity by hop 0..3), selectable via tweak:
 **Compare mode** renders two canvases side by side, one per dataset, split by
 a 1px divider, each at half width. Selection, active layer, class filters and
 focus settings are shared across both. Side A is `activeDataset` (the top-bar
-dataset seg); side B is `compareDataset`, chosen from a `vs` select next to
-the seg (visible only in Compare mode) — see §9 for why a separate B picker
-exists now that there are five candidate datasets instead of two.
+dataset seg); side B is `compareDataset`, chosen from a `vs` select in the
+toolbar's Compare cluster (§3, visible only in Compare mode) — see §9 for why a
+separate B picker exists now that there are five candidate datasets instead of two.
 
 **Unmatched selection.** The shared `selected` id is looked up independently
 in each dataset — see §9's `matchLabel`/Alignment-tab description. When that
@@ -344,6 +367,8 @@ clickable → select. Unmatched B shows `—` and Δ shows `A only`.
 - **Focus modes** — `none`: no decay, everything at full opacity. `highlight`: subgraph at decay alpha, everything else at 0.1. `filter`: non-subgraph nodes and edges are removed from the DOM entirely.
 - **Hops** — 1/2/3, sets BFS depth.
 - **Direction** — `down` follows outgoing edges only; `up` follows incoming edges only; `both` follows both. Affects BFS, which of the inspector's outgoing/incoming groups render, and nothing else (the tree is always outgoing).
+- **Mode** — `layers` / `compare` segmented control in the top bar. `showLayers` also clears `nsmMetric` and moves the inspector off `Alignment`; `showCompare` selects the `Alignment` tab. Both reset `railOpen` / `inspectorOpen` to their mode defaults.
+- **View menu** — a toolbar popover (§12) toggling the three side panels (rail, inspector, trace tree) and the three canvas overlays (labels, info band, minimap), plus a reset-pan/zoom action. Dismiss: click the scrim, or resize the window.
 - **Class toggle** — removes that class from the view; layer counts, node counts and edges recompute.
 - **Layer visibility / opacity / active** — active layer sets the ceiling: nodes and edges with `layer > active` are excluded. Per-layer opacity multiplies into node and edge alpha.
 - **Tree expand/collapse** — per-row toggles stored by path key; expand/collapse-all resets toggles and moves the base depth.
@@ -412,8 +437,8 @@ copy (`datasetMeta[key].label`, via the `dsLabel()` helper) is shortened.
 With exactly two datasets, Compare mode's second canvas could just be "the
 other one." With five, "the other one" is ambiguous, so Compare mode needs its
 own second selector: a `compareDataset` state field, exposed as a `vs` select
-(styled as `.nsm-select`, same control already used for the NSM metric
-picker) next to the main dataset seg, shown only when `isCompare`. The
+(styled as `.nsm-select`, same control used for the NSM metric picker beside
+it) in the toolbar's Compare cluster (§3), shown only when `isCompare`. The
 invariant `activeDataset !== compareDataset` is maintained by swapping rather
 than blocking: picking a dataset that's already the other side swaps A and B
 instead of colliding or silently no-op'ing. Only changing `activeDataset`
@@ -528,10 +553,46 @@ the user commits to a click.
 - Hovering never selects — clicking still does, exactly as before; hover is
   purely an additional, non-committal layer on top of the existing click path.
 
+### 12. The `view` menu — a second deliberate new pattern
+
+§10's modal was the first departure from "reuse an existing idiom." The `view`
+menu is the second: a lightweight **popover** hung off a `toolbar-pill`. It
+exists because five separate show/hide toggles (rail, inspector, trace tree) plus
+three canvas-overlay toggles plus `reset view` had spread across the top bar and
+the toolbar with no grouping — the "too many peer controls" problem this pass set
+out to fix. Gathering them behind one `view ▾` pill trades a click for a much
+quieter toolbar; they're all infrequent, so that's the right trade. Which
+consolidation to use here was an explicit product decision — an always-visible
+inline cluster was the alternative; the popover won on "reduces the crowded
+perception."
+
+It still reads as Organic chrome: it borrows the modal's surface tokens (cream
+`--color-bg` ground, `--radius-sm`, `--shadow-lg`) and the layer card's
+visibility-toggle idiom (12px square, `--color-accent` fill when on) for the
+checkbox rows. Section headers (`Panels` / `Canvas overlays`) use the standard
+`.08em` uppercase mono. `reset pan & zoom` is an action row (top divider, no
+checkbox).
+
+- **Anatomy**: `.view-menu` (relative anchor) › `toolbar-pill` trigger, taking
+  the overlay-active span while open › `.view-menu__scrim`
+  (`position:fixed; inset:0; z-index:40`) › `.view-menu__pop`
+  (`position:absolute; right:0; z-index:41`, 196px). The pop is a **sibling** of
+  the scrim, not a child, so row clicks don't bubble to the scrim's close handler.
+- **Dismiss**: click the scrim (same "click bare background to dismiss" idiom as
+  `svgClick` and the modal's `@click.self`), or any `window` resize — the
+  `_onResize` handler clears `viewMenuOpen` so the absolutely-positioned pop can't
+  be left stranded. No Escape handler, matching the modal.
+- **Below the modal**: the modal scrim is `z-index:50`, above this menu's 40/41.
+- **Checkbox truth**: each tick binds to the *effective shown* state (`railShown`
+  / `inspectorShown` / `treeShown` / `labels` / `cornerTagShown` /
+  `minimapShown`), not a raw wanted-flag — so `trace tree` reads unchecked at
+  `colW < 640` even when `treeWanted`.
+
 ## State management
 
 ```
-mode: 'layers' | 'compare'            // top-bar mode
+mode: 'layers' | 'compare'            // top-bar segmented control
+viewMenuOpen: boolean                 // toolbar "view" popover — see §3 / §12
 panel: 'node' | 'layer' | 'align'     // inspector tab
 active: 0..3                          // active (ceiling) layer index
 vis: boolean[4]                       // per-layer visibility
@@ -543,7 +604,9 @@ focus: 'none' | 'highlight' | 'filter'
 hop: 1 | 2 | 3
 dir: 'down' | 'up' | 'both'
 labels: boolean
-tree: boolean | null                  // null = follow the treePane default
+treeWanted: boolean                   // trace-pane toggle; actual visibility also needs colW >= 640
+nsmMetric: string                     // 'none' + NSM_METRICS keys; compare-only, reset to 'none' by showLayers — §3/§4
+nsmState: 'specific' | 'differential' | 'common'
 open: Record<pathKey, boolean>        // tree row overrides
 baseDepth: number                     // default-open depth
 query: string                         // search box (unwired)

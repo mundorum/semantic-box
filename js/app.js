@@ -7,6 +7,7 @@ createApp({
     return {
       mode: 'layers',           // 'layers' | 'compare'
       query: '',                 // search box — not yet wired (design intent only)
+      viewMenuOpen: false,       // toolbar "view" popover — panel + overlay toggles (README §12)
 
       // Measured column box. The graph width is DERIVED from colW, never measured
       // directly — see README "Critical layout constraint".
@@ -158,11 +159,6 @@ createApp({
     model() { return this.datasets[this.activeDataset]; },
     modelB() { return this.datasets[this.compareDataset]; },
 
-    datasetLabel() {
-      const m = this.model;
-      return '◦ ' + this.dsLabel(this.activeDataset) + ' · ' + m.nodes.length + ' n · ' + m.edges.length + ' e';
-    },
-
     // Real data is one flat snapshot — collapses the mock 4-layer build-stack
     // (stage 3) down to a single real "loaded" layer. See js/data-loader.js.
     layersMeta() {
@@ -312,7 +308,7 @@ createApp({
     },
 
     nsmMetricOptions() {
-      return [{ key: 'none', label: 'compare: off' }].concat(NSM_METRICS);
+      return [{ key: 'none', label: 'off' }].concat(NSM_METRICS);
     },
 
     // { A: {nodeId: {state,strong,color}}, B: {...} } — see computeNsmMarks.
@@ -476,7 +472,11 @@ createApp({
   },
 
   methods: {
-    showLayers() { this.mode = 'layers'; if (this.panel === 'align') this.panel = 'node'; this.railOpen = null; this.inspectorOpen = null; },
+    // "Compare by" (NSM) is a cross-dataset feature and its picker now lives
+    // in the compare-only toolbar cluster — so leaving compare mode turns it
+    // off, or nodes would keep the NSM label/ring treatment with no visible
+    // control to clear it.
+    showLayers() { this.mode = 'layers'; if (this.panel === 'align') this.panel = 'node'; this.railOpen = null; this.inspectorOpen = null; this.nsmMetric = 'none'; },
     showCompare() { this.mode = 'compare'; this.panel = 'align'; this.railOpen = null; this.inspectorOpen = null; },
 
     toggleRail() { this.railOpen = !this.railShown; },
@@ -914,7 +914,7 @@ createApp({
       if (this._centerCol) this._ro.observe(this._centerCol);
       if (this._canvasWrap) this._ro.observe(this._canvasWrap);
     }
-    this._onResize = () => this.measure();
+    this._onResize = () => { this.viewMenuOpen = false; this.measure(); };
     window.addEventListener('resize', this._onResize);
     this.measure();
 

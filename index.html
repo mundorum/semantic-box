@@ -14,7 +14,9 @@
 <div id="app">
   <div class="shell">
 
-    <!-- top bar · 52px -->
+    <!-- top bar · 52px — identity · dataset · mode only; panel + overlay
+         toggles live in the toolbar's "view" menu, compare sub-controls in
+         the toolbar's Compare cluster. See README §1. -->
     <div class="topbar">
       <span class="topbar__wordmark">semantic box</span>
       <div class="seg">
@@ -22,33 +24,15 @@
                 :class="{ 'seg-opt--selected': activeDataset === k }" @click="setDataset(k)">[[ dsLabel(k) ]]</button>
       </div>
       <button class="toolbar-pill" @click="openManage" title="add or remove displayed graphs">manage graphs</button>
-      <span class="topbar__dataset">[[ datasetLabel ]]</span>
-      <template v-if="isCompare">
-        <span class="topbar__vs">vs</span>
-        <select class="nsm-select" :value="compareDataset" @change="setCompareDataset($event.target.value)"
-                title="second dataset for canvas B / the Alignment tab">
-          <option v-for="k in datasetKeys" :key="k" :value="k">[[ dsLabel(k) ]]</option>
-        </select>
-      </template>
-      <span class="topbar__spacer"></span>
       <span class="load-error" v-if="loadError">load error: [[ loadError ]]</span>
+      <span class="topbar__spacer"></span>
       <input class="search-input" placeholder="search &amp; jump" v-model="query">
-      <button class="toolbar-pill" @click="toggleRail" title="show/hide the layers panel">
-        <span class="pill__active-overlay" v-if="railShown"></span>
-        <span class="pill__label">rail</span>
-      </button>
-      <button class="toolbar-pill" @click="toggleInspector" title="show/hide the inspector panel">
-        <span class="pill__active-overlay" v-if="inspectorShown"></span>
-        <span class="pill__label">inspector</span>
-      </button>
-      <button class="pill" @click="showLayers">
-        <span class="pill__active-overlay" v-if="isLayers"></span>
-        <span class="pill__label">Layers</span>
-      </button>
-      <button class="pill" @click="showCompare">
-        <span class="pill__active-overlay" v-if="isCompare"></span>
-        <span class="pill__label">Compare</span>
-      </button>
+      <span class="bar-rule"></span>
+      <span class="toolbar__label">mode</span>
+      <div class="seg">
+        <button class="seg-opt" :class="{ 'seg-opt--selected': isLayers }" @click="showLayers">layers</button>
+        <button class="seg-opt" :class="{ 'seg-opt--selected': isCompare }" @click="showCompare">compare</button>
+      </div>
     </div>
 
     <!-- three-column grid -->
@@ -144,35 +128,60 @@
                     :class="{ 'seg-opt--selected': dir === d.key }" @click="setDir(d.key)" :title="d.title">[[ d.label ]]</button>
           </div>
 
-          <button class="toolbar-pill" @click="toggleLabels">[[ labels ? 'labels on' : 'labels off' ]]</button>
-          <button class="toolbar-pill" @click="resetView" title="reset pan and zoom">reset view</button>
-          <button class="toolbar-pill" @click="toggleCornerTag" title="show/hide the info band in the top-left corner of the graph">
-            <span class="pill__active-overlay" v-if="cornerTagShown"></span>
-            <span class="pill__label">info band</span>
-          </button>
-          <button class="toolbar-pill" @click="toggleMinimap" title="show/hide the minimap">
-            <span class="pill__active-overlay" v-if="minimapShown"></span>
-            <span class="pill__label">minimap</span>
-          </button>
-
-          <span class="toolbar__label">Compare by</span>
-          <select class="nsm-select" :value="nsmMetric" @change="setNsmMetric($event.target.value)">
-            <option v-for="m in nsmMetricOptions" :key="m.key" :value="m.key">[[ m.label ]]</option>
-          </select>
-          <div class="seg" v-if="nsmMetric !== 'none'">
-            <button v-for="s in ['specific','differential','common']" :key="s" class="seg-opt"
-                    :class="{ 'seg-opt--selected': nsmState === s }" @click="setNsmState(s)">[[ s ]]</button>
-          </div>
+          <template v-if="isCompare">
+            <span class="bar-rule"></span>
+            <span class="toolbar__label">Compare</span>
+            <span class="toolbar__label">vs</span>
+            <select class="nsm-select" :value="compareDataset" @change="setCompareDataset($event.target.value)"
+                    title="second dataset for canvas B / the Alignment tab">
+              <option v-for="k in datasetKeys" :key="k" :value="k">[[ dsLabel(k) ]]</option>
+            </select>
+            <span class="toolbar__label">by</span>
+            <select class="nsm-select" :value="nsmMetric" @change="setNsmMetric($event.target.value)"
+                    title="node-specificity metric to mark across the two datasets">
+              <option v-for="m in nsmMetricOptions" :key="m.key" :value="m.key">[[ m.label ]]</option>
+            </select>
+            <div class="seg" v-if="nsmMetric !== 'none'">
+              <button v-for="s in ['specific','differential','common']" :key="s" class="seg-opt"
+                      :class="{ 'seg-opt--selected': nsmState === s }" @click="setNsmState(s)">[[ s ]]</button>
+            </div>
+            <span class="compare-badge">⛓ synced pan · zoom · layer · selection</span>
+          </template>
 
           <span class="toolbar__spacer"></span>
 
-          <span class="compare-badge" v-if="isCompare">⛓ synced pan · zoom · layer · selection</span>
-
-          <button class="toolbar-pill" @click="toggleTree">
-            <span class="pill__active-overlay" v-if="treeShown"></span>
-            <span class="pill__label">trace tree</span>
-          </button>
-          <span class="tree-squashed-note" v-if="treeWanted && !treeShown">pane needs a wider window</span>
+          <div class="view-menu">
+            <button class="toolbar-pill" @click="viewMenuOpen = !viewMenuOpen"
+                    title="show/hide panels and canvas overlays">
+              <span class="pill__active-overlay" v-if="viewMenuOpen"></span>
+              <span class="pill__label">view ▾</span>
+            </button>
+            <div class="view-menu__scrim" v-if="viewMenuOpen" @click="viewMenuOpen = false"></div>
+            <div class="view-menu__pop" v-if="viewMenuOpen">
+              <div class="view-menu__group">Panels</div>
+              <button class="view-menu__row" @click="toggleRail">
+                <span class="view-menu__chk" :class="{ 'view-menu__chk--on': railShown }"></span>rail
+              </button>
+              <button class="view-menu__row" @click="toggleInspector">
+                <span class="view-menu__chk" :class="{ 'view-menu__chk--on': inspectorShown }"></span>inspector
+              </button>
+              <button class="view-menu__row" @click="toggleTree">
+                <span class="view-menu__chk" :class="{ 'view-menu__chk--on': treeShown }"></span>trace tree
+              </button>
+              <div class="view-menu__group">Canvas overlays</div>
+              <button class="view-menu__row" @click="toggleLabels">
+                <span class="view-menu__chk" :class="{ 'view-menu__chk--on': labels }"></span>labels
+              </button>
+              <button class="view-menu__row" @click="toggleCornerTag">
+                <span class="view-menu__chk" :class="{ 'view-menu__chk--on': cornerTagShown }"></span>info band
+              </button>
+              <button class="view-menu__row" @click="toggleMinimap">
+                <span class="view-menu__chk" :class="{ 'view-menu__chk--on': minimapShown }"></span>minimap
+              </button>
+              <button class="view-menu__row view-menu__row--action" @click="resetView">reset pan &amp; zoom</button>
+            </div>
+          </div>
+          <span class="tree-squashed-note" v-if="treeWanted && !treeShown">trace pane needs a wider window</span>
         </div>
 
         <div class="center-body" :ref="setCanvasWrap">

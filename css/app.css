@@ -35,15 +35,19 @@ body {
   letter-spacing: .08em;
   text-transform: uppercase;
 }
-.topbar__dataset {
-  font: 400 11px/1 var(--font-mono);
-  color: var(--color-neutral-600);
-}
-.topbar__vs {
-  font: 400 10px/1 var(--font-mono);
-  color: var(--color-neutral-600);
-}
 .topbar__spacer { flex: 1; }
+
+/* Hairline divider between clusters in the top bar and the focus toolbar —
+   1px geometry, same rationale as every other hairline in this dense chrome
+   (see README §Design tokens "local departures"). */
+.bar-rule {
+  flex: none;
+  align-self: center;
+  width: 1px;
+  height: 20px;
+  background: var(--color-divider);
+  margin: 0 2px;
+}
 
 .search-input {
   width: 170px;
@@ -374,6 +378,65 @@ body {
   cursor: pointer;
 }
 .nsm-select:hover { border-color: var(--color-accent); }
+
+/* ── view menu — toolbar popover gathering every panel + overlay toggle ──
+   A deliberate second departure from the "reuse an existing idiom" rule
+   (the modal in §10 was the first). It borrows the modal's surface tokens
+   (cream ground, --radius-sm, --shadow-lg) and the vis-toggle's accent-fill
+   idiom for the checkboxes, so it still reads as Organic chrome. See
+   README §12. */
+.view-menu { position: relative; }
+.view-menu__scrim { position: fixed; inset: 0; z-index: 40; }
+.view-menu__pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 41;
+  width: 196px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 7px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-neutral-400);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+}
+.view-menu__group {
+  padding: 7px 8px 4px;
+  font: 500 9px/1 var(--font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--color-neutral-600);
+}
+.view-menu__row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-neutral-700);
+  cursor: pointer;
+  text-align: left;
+  font: 400 10px/1 var(--font-mono);
+}
+.view-menu__row:hover { background: var(--color-neutral-100); }
+.view-menu__row--action {
+  margin-top: 4px;
+  padding-top: 9px;
+  border-top: 1px solid var(--color-divider);
+  color: var(--color-neutral-600);
+}
+.view-menu__chk {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--color-neutral-500);
+}
+.view-menu__chk--on { background: var(--color-accent); border-color: var(--color-accent); }
 
 /* ── canvas ──────────────────────────────────────────────────────────── */
 
