@@ -1,0 +1,150 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <style>
+    :root{
+      --ink:#201e1d; --accent:#c67139; --ground:#f5ead8; --surface:#ebddc5;
+      --n100:#f9f4ed; --n300:#dcd3c4; --n400:#c0b6a5; --n600:#82796a; --n700:#645c50;
+      --divider:rgba(32,30,29,.16);
+    }
+    *{box-sizing:border-box;}
+    body{margin:0; background:var(--ground); color:var(--ink);
+      font:400 14px/1.5 'Figtree',system-ui,sans-serif; -webkit-font-smoothing:antialiased;}
+    a{color:#b45309;} a:hover{color:#92400e;}
+    h1{margin:0; font-weight:700;}
+    .mono{font-family:'JetBrains Mono',monospace;}
+    .eyebrow{font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.13em;
+      text-transform:uppercase; color:var(--n600);}
+    .col{display:flex; flex-direction:column;}
+    .frame{display:flex; align-items:center; justify-content:center; background:#fff;
+      border:1px solid var(--n400); border-radius:8px;}
+    .step{display:flex; gap:22px; padding-top:22px; border-top:1px solid var(--divider);}
+    .tag{display:inline-block; font-family:'JetBrains Mono',monospace; font-size:9px;
+      letter-spacing:.03em; color:var(--accent); border:1px solid var(--accent);
+      background:#fff2eb; padding:2px 6px; border-radius:999px;}
+  </style>
+</helmet>
+
+<div style="padding:40px; max-width:700px; margin:0 auto; display:flex; flex-direction:column; gap:26px;">
+
+  <div class="col" style="gap:8px;">
+    <div class="eyebrow">Semantic Box &middot; icon</div>
+    <h1 style="font-size:22px;">Version history</h1>
+    <p style="margin:0; font-size:13px; color:var(--n700); max-width:60ch;">
+      How the mark got to where it is. Round&nbsp;1 was five direction sketches; round&nbsp;2 was
+      four passes on the box itself. The fine-tuning steps between saved versions (shading, tape
+      geometry, node placement) aren't shown &mdash; they were never committed separately.
+    </p>
+  </div>
+
+  <!-- round 1 -->
+  <div class="col" style="gap:12px;">
+    <div class="eyebrow">Round 1 &middot; direction sketches</div>
+    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+      <div class="col" style="gap:6px; align-items:center; width:96px;">
+        <div class="frame" style="width:76px; height:76px;"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><circle cx="12" cy="12" r="8" stroke="#c67139" stroke-width="1.4" opacity=".28"/><circle cx="12" cy="12" r="5" stroke="#c67139" stroke-width="1.7" opacity=".6"/><circle cx="12" cy="12" r="2.4" fill="#c67139" stroke="none"/></svg></div>
+        <span class="mono" style="font-size:9px; color:var(--n600); text-align:center;">Focus box</span>
+      </div>
+      <div class="col" style="gap:6px; align-items:center; width:96px;">
+        <div class="frame" style="width:76px; height:76px;"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><line x1="8.6" y1="15.4" x2="14.8" y2="9"/><circle cx="8" cy="16" r="2.3" fill="#201e1d" stroke="none"/><circle cx="15.4" cy="8.6" r="3" fill="#c67139" stroke="none"/></svg></div>
+        <span class="mono" style="font-size:9px; color:var(--n600); text-align:center;">Boxed graph</span>
+      </div>
+      <div class="col" style="gap:6px; align-items:center; width:96px;">
+        <div class="frame" style="width:76px; height:76px;"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="9.5" width="11.5" height="11.5" rx="2.5"/><rect x="6.25" y="6.25" width="11.5" height="11.5" rx="2.5" fill="#f5ead8"/><rect x="10" y="3" width="11.5" height="11.5" rx="2.5" fill="#f5ead8"/><line x1="13.7" y1="10.3" x2="17.6" y2="6.4"/><circle cx="13.7" cy="10.3" r="1.5" fill="#201e1d" stroke="none"/><circle cx="17.6" cy="6.4" r="1.9" fill="#c67139" stroke="none"/></svg></div>
+        <span class="mono" style="font-size:9px; color:var(--n600); text-align:center;">Layer stack</span>
+      </div>
+      <div class="col" style="gap:6px; align-items:center; width:96px;">
+        <div class="frame" style="width:76px; height:76px;"><svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><circle cx="8" cy="8.8" r="2.4" fill="#201e1d" stroke="none"/><rect x="13" y="6.4" width="5" height="5" rx="1.1" fill="#c67139" stroke="none"/><path d="M12 12.9 l3.1 3.1 -3.1 3.1 -3.1 -3.1 z" fill="#201e1d" stroke="none"/></svg></div>
+        <span class="mono" style="font-size:9px; color:var(--accent); text-align:center;">Shape trio &nearr;</span>
+      </div>
+      <div class="col" style="gap:6px; align-items:center; width:96px;">
+        <div class="frame" style="width:76px; height:76px;"><svg width="46" height="46" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4.5" fill="#c67139"/><text x="12" y="16.3" text-anchor="middle" font-family="'JetBrains Mono',monospace" font-size="10.5" font-weight="500" fill="#f5ead8">sb</text></svg></div>
+        <span class="mono" style="font-size:9px; color:var(--n600); text-align:center;">Monogram</span>
+      </div>
+    </div>
+    <p class="mono" style="margin:0; font-size:10px; color:var(--n600); line-height:1.5;">
+      Focus box led first; Shape trio's circle&nbsp;/&nbsp;box&nbsp;/&nbsp;diamond was the piece that carried forward.
+    </p>
+  </div>
+
+  <!-- round 2 timeline -->
+  <div class="col" style="gap:18px;">
+    <div class="eyebrow">Round 2 &middot; the box mark</div>
+
+    <div class="step" style="border-top:none; padding-top:0;">
+      <div class="col" style="flex:none; width:96px; align-items:center; gap:8px;">
+        <div class="frame" style="width:88px; height:88px;"><svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="#201e1d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4.5"/><circle cx="12" cy="12" r="8" stroke="#c67139" stroke-width="1.4" opacity=".28"/><circle cx="12" cy="12" r="5" stroke="#c67139" stroke-width="1.7" opacity=".6"/><circle cx="12" cy="12" r="2.4" fill="#c67139" stroke="none"/></svg></div>
+        <span class="mono" style="font-size:9px; color:var(--n600);">v1</span>
+      </div>
+      <div class="col" style="gap:5px; padding-top:2px;">
+        <span class="mono" style="font-size:12px; font-weight:500;">Focus box</span>
+        <span class="mono" style="font-size:9px; color:var(--n600);">first publish</span>
+        <p style="margin:3px 0 0; font-size:12px; color:var(--n700); line-height:1.55;">
+          The hop-decay mechanic as a mark: a selected node, relevance fading outward in rings
+          whose opacities are the real decay curve. Recommended, until the brief turned toward a
+          literal &ldquo;box.&rdquo;
+        </p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="col" style="flex:none; width:96px; align-items:center; gap:8px;">
+        <div class="frame" style="width:88px; height:88px;"><svg width="60" height="60" viewBox="0 0 24 24"><polygon points="3,7 7,3 21,3 17,7" fill="#e6d9c0" stroke="#201e1d" stroke-width=".95" stroke-linejoin="round"/><polygon points="17,7 21,3 21,17 17,21" fill="#ccbea4" stroke="#201e1d" stroke-width=".95" stroke-linejoin="round"/><rect x="3" y="7" width="14" height="14" rx=".7" fill="#f7f0e2" stroke="#201e1d" stroke-width=".95" stroke-linejoin="round"/><polygon points="8.3,6.3 11.3,6.3 15.3,2.3 12.3,2.3" fill="#cabda2"/><line x1="6.9" y1="11.3" x2="13.1" y2="11.3" stroke="#201e1d" stroke-width="1.15" stroke-linecap="round"/><line x1="13.1" y1="11.3" x2="10" y2="17" stroke="#201e1d" stroke-width="1.15" stroke-linecap="round"/><line x1="10" y1="17" x2="6.9" y2="11.3" stroke="#201e1d" stroke-width="1.15" stroke-linecap="round"/><circle cx="6.9" cy="11.3" r="2" fill="#201e1d"/><rect x="11.3" y="9.5" width="3.6" height="3.6" rx=".6" fill="#c67139"/><path d="M10 14.4 l2.5 2.5 -2.5 2.5 -2.5 -2.5 z" fill="#201e1d"/></svg></div>
+        <span class="mono" style="font-size:9px; color:var(--n600);">v2</span>
+      </div>
+      <div class="col" style="gap:5px; padding-top:2px;">
+        <span class="mono" style="font-size:12px; font-weight:500;">Cardboard box, trio on the front</span>
+        <span class="mono" style="font-size:9px; color:var(--n600);">label &mdash; cardboard-box-trio</span>
+        <p style="margin:3px 0 0; font-size:12px; color:var(--n700); line-height:1.55;">
+          First box: cabinet projection, square front face, three warm neutral tints, a strip of
+          tape across the top. The circle&nbsp;/&nbsp;box&nbsp;/&nbsp;diamond trio sits on the front,
+          two nodes in ink, one on the terracotta accent.
+        </p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="col" style="flex:none; width:96px; align-items:center; gap:8px;">
+        <div class="frame" style="width:88px; height:88px;"><svg width="62" height="62" viewBox="0 0 24 24"><polygon points="12,2.5 21,7.5 12,12.5 3,7.5" fill="#d8b285" stroke="#5a3f22" stroke-width=".95" stroke-linejoin="round"/><polygon points="3,7.5 12,12.5 12,21.5 3,16.5" fill="#ecd4ad" stroke="#5a3f22" stroke-width=".95" stroke-linejoin="round"/><polygon points="12,12.5 21,7.5 21,16.5 12,21.5" fill="#b98a54" stroke="#5a3f22" stroke-width=".95" stroke-linejoin="round"/><line x1="12" y1="12.5" x2="12" y2="21.5" stroke="#3f2c17" stroke-width="1"/><polygon points="10.95,4.2 13.05,4.2 13.5,12.5 10.5,12.5" fill="#f3e8cf" stroke="#cdb185" stroke-width=".4"/><polygon points="10.5,12.5 13.5,12.5 13.5,16.6 12,17.4 10.5,16.5" fill="#e9dbbd" stroke="#cdb185" stroke-width=".4"/><line x1="15.7" y1="13" x2="18.4" y2="13.5" stroke="#43372a" stroke-width="1.1"/><line x1="18.4" y1="13.5" x2="16.8" y2="16.8" stroke="#43372a" stroke-width="1.1"/><line x1="16.8" y1="16.8" x2="15.7" y2="13" stroke="#43372a" stroke-width="1.1"/><circle cx="15.7" cy="13" r="1.65" fill="#c67139" stroke="#f6ecda" stroke-width=".4"/><rect x="16.95" y="12.05" width="3" height="3" rx=".5" fill="#7a8a5e" stroke="#f6ecda" stroke-width=".4"/><path d="M16.8 15.25 l1.6 1.6 -1.6 1.6 -1.6 -1.6 z" fill="#43372a" stroke="#f6ecda" stroke-width=".4"/></svg></div>
+        <span class="mono" style="font-size:9px; color:var(--n600);">v3</span>
+      </div>
+      <div class="col" style="gap:5px; padding-top:2px;">
+        <span class="mono" style="font-size:12px; font-weight:500;">True isometric, tri-tone trio</span>
+        <span class="mono" style="font-size:9px; color:var(--n600);">label &mdash; iso-cardboard-tritone &middot; committed 59d0e0a</span>
+        <p style="margin:3px 0 0; font-size:12px; color:var(--n700); line-height:1.55;">
+          Rebuilt as a real isometric box with emoji-style shading &mdash; light / mid / dark
+          faces. Tape seals the seam and folds over the front corner. Trio recoloured to three
+          distinct tones (terracotta / sage / deep brown) and moved onto the right face.
+        </p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="col" style="flex:none; width:96px; align-items:center; gap:8px;">
+        <div class="frame" style="width:88px; height:88px; border-color:var(--accent);"><svg width="62" height="62" viewBox="0 0 24 24"><polygon points="12,2 21.3,7.2 12,12.4 2.7,7.2" fill="#e7c9a0" stroke="#5a3f22" stroke-width=".95" stroke-linejoin="round"/><polygon points="12,12.4 21.3,7.2 21.3,16.8 12,22" fill="#cc8449" stroke="#5a3f22" stroke-width=".95" stroke-linejoin="round"/><polygon points="2.7,7.2 12,12.4 12,22 2.7,16.8" fill="#efdcb8" stroke="#5a3f22" stroke-width=".95" stroke-linejoin="round"/><line x1="12" y1="12.4" x2="12" y2="22" stroke="#3f2c17" stroke-width="1"/><polygon points="20.05,7.9 16.47,9.9 16.47,13.3 20.05,11.3" fill="#e7d8b6" stroke="#c7ab7e" stroke-width=".4"/><polygon points="3.95,7.9 20.05,7.9 16.47,9.9 7.53,9.9" fill="#f1e5c9" stroke="#c7ab7e" stroke-width=".4" stroke-linejoin="round"/><line x1="5.3" y1="11.6" x2="10.5" y2="13.5" stroke="#2b2015" stroke-width=".85" stroke-linecap="round"/><line x1="10.5" y1="13.5" x2="7" y2="17.6" stroke="#2b2015" stroke-width=".85" stroke-linecap="round"/><line x1="7" y1="17.6" x2="5.3" y2="11.6" stroke="#2b2015" stroke-width=".85" stroke-linecap="round"/><path d="M7 16.3 l1.3 1.3 -1.3 1.3 -1.3 -1.3 z" fill="#2f261b" stroke="#f2e6d0" stroke-width=".35"/><rect x="9.5" y="12.5" width="2" height="2" rx=".4" fill="#c67139" stroke="#f2e6d0" stroke-width=".35"/><circle cx="5.3" cy="11.6" r="1.25" fill="#f7eddb" stroke="#2b2015" stroke-width=".85"/></svg></div>
+        <span class="tag">current</span>
+      </div>
+      <div class="col" style="gap:5px; padding-top:2px;">
+        <span class="mono" style="font-size:12px; font-weight:500;">Graph on the side</span>
+        <span class="mono" style="font-size:9px; color:var(--n600);">label &mdash; graph-on-the-side &middot; committed aac3095</span>
+        <p style="margin:3px 0 0; font-size:12px; color:var(--n700); line-height:1.55;">
+          From the hand-drawn draft: the right face pushed to a shaded terracotta, tape band across
+          the top folding onto that side. The trio moved to the light left face, spread apart and
+          wired into a clear connected triangle &mdash; hollow circle, terracotta box, dark diamond.
+          Several unsaved passes went into node spacing, edge weight and clearing the silhouette.
+        </p>
+      </div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>
