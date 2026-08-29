@@ -234,10 +234,11 @@ they stay legible when the row wraps.
 
 - `Compare` section label, then `vs` + a dataset `<select>` (`.nsm-select`) choosing side B / the Alignment tab's B (`compareDataset` — §9).
 - `by` + a metric `<select>` (`.nsm-select`) — the NSM (node-specificity-by-metric) picker; first option is `off`. When a metric is chosen, a `specific` / `differential` / `common` segmented control follows.
-- Compare-mode badge — `1px solid #c67139`, `background:#fff2eb`, ink `--color-accent-700`. Copy: `⛓ synced pan · zoom · layer · selection`.
+- `Reach` — an `off` / `shared` / `unique` segmented control (`reachOp`), the reach set comparison (§13). Compare-only; reset to `off` by `showLayers` alongside `nsmMetric`.
+- Compare-mode badge — now a bare `⛓` glyph (`.compare-badge.compare-badge--icon`), same `1px solid #c67139` / `background:#fff2eb` pill, with the former copy (`pan, zoom, active layer and selection stay in sync across both canvases`) moved to its `title` tooltip. It was a full-width label; the sync it announces is real (§4) but the text was crowding the cluster, so it shrank to its icon.
 - NSM is a cross-dataset feature, so it lives here and nowhere else. `showLayers` sets `nsmMetric = 'none'` on the way out, or nodes keep the NSM label/ring treatment with no visible control to clear it.
 
-**Spacer**, then the **`view` menu** (right-aligned) — a `toolbar-pill` `view ▾` with the overlay-active idiom, opening a popover (§12) that gathers every show/hide + reset:
+**Spacer**, then — when `hiddenCount > 0` — the **`hidden (N) ▾` menu** (§14), then the **`view` menu** (right-aligned) — a `toolbar-pill` `view ▾` with the overlay-active idiom, opening a popover (§12) that gathers every show/hide + reset:
 
 - Panels: `rail`, `inspector`, `trace tree` — checkbox rows (`toggleRail` / `toggleInspector` / `toggleTree`). The tick reflects the *shown* state, so `trace tree` reads unchecked at `colW < 640` even when wanted.
 - Canvas overlays: `labels`, `info band`, `minimap` (`toggleLabels` / `toggleCornerTag` / `toggleMinimap`). Default all on. They exist because on a dense layout an overlay can sit on top of graph content the user needs.
@@ -364,6 +365,7 @@ clickable → select. Unmatched B shows `—` and Δ shows `A only`.
 
 - **Select node** — click canvas node, tree row, neighbour row, or alignment row. Recomputes BFS distances. If the tree root was unset or was tracking the previous selection, the root follows; otherwise it stays pinned. Switches the inspector to `Node` unless the user is on `Alignment`.
 - **Clear selection** — click bare canvas. Tree root is retained.
+- **Hide node** — `Del` / `Backspace` while a node is selected (the app's only keyboard shortcut; ignored while an `input`/`select`/`textarea` has focus), or the Node tab's `hide node` pill. See §14.
 - **Focus modes** — `none`: no decay, everything at full opacity. `highlight`: subgraph at decay alpha, everything else at 0.1. `filter`: non-subgraph nodes and edges are removed from the DOM entirely.
 - **Hops** — 1/2/3, sets BFS depth.
 - **Direction** — `down` follows outgoing edges only; `up` follows incoming edges only; `both` follows both. Affects BFS, which of the inspector's outgoing/incoming groups render, and nothing else (the tree is always outgoing).
@@ -590,6 +592,75 @@ checkbox).
   `minimapShown`), not a raw wanted-flag — so `trace tree` reads unchecked at
   `colW < 640` even when `treeWanted`.
 
+### 13. Reach set comparison (compare mode)
+
+Selecting a node already gives each canvas its own BFS-reachable set from that
+node — `view.dist` / `viewB.dist`, respecting the current `Hops` (1/2/3) and
+`Direction`. The **`Reach`** segmented control in the Compare cluster (§3)
+narrows both subgraphs to a set operation over those two reachable sets:
+
+- `off` (default) — no change.
+- `shared` (intersection) — on **both** canvases, only nodes the selection
+  reaches on **both** sides stay in the highlighted subgraph.
+- `unique` (difference) — **symmetric per canvas**: the left canvas keeps
+  `reach(A) \ reach(B)`, the right keeps `reach(B) \ reach(A)`. Each side shows
+  what only *it* reaches.
+
+The **selected node itself is always kept** (it is `dist 0` on every side; the
+op never excludes it), and on a side where the selection has no counterpart the
+op is inert for that side (nothing there is "reached" to begin with).
+
+**It narrows the existing highlight — it does not add a ring.** A node the op
+excludes is treated exactly like a node outside the subgraph: `sub` becomes
+`false` for it, so it dims to `0.1` under Focus `highlight`, disappears under
+Focus `filter`, and stays flat under Focus `none` (which does no dimming at
+all, so `Reach` has no visible effect there — expected). This was a deliberate
+choice over a distinct marker ring: the canvas already carries four ring
+patterns (selection stroke, hop ring, NSM ring, hover ring — §11) and a fifth
+would be ring soup. Implementation: `computeNodesFor` / `computeEdgesFor` take
+the other side's `dist` as a 4th/2nd argument and fold a `reachExcluder(v,
+otherDist)` predicate into the `sub` / `both` test — the whole downstream
+render (opacity, hop ring, label rule, `filter`-mode skip) already keys off
+those. The corner tag gains ` · reach shared` / ` · reach unique` when active.
+
+`reachOp` is compare-only and reset to `'off'` by `showLayers` (like
+`nsmMetric`), so a stale narrowing can't outlive the mode that has a control
+for it.
+
+### 14. Manual hidden nodes
+
+A per-node "get this out of my way" removal, independent of the class filter
+and the q-value filter. Select a node and press `Del` (or `Backspace`), or hit
+the `hide node` pill in the Node tab's action row: the node — and, implicitly,
+every edge touching it — leaves **every** canvas. It is `Del`-to-remove, the
+one keyboard shortcut in the app; the `keydown` handler is on `window` and
+bails out while an `input`/`select`/`textarea` has focus (so `Backspace` still
+edits the search box).
+
+- **State**: `hidden` — a `{ [nodeId]: true }` map, same shape as `cls`. Folded
+  into `computeView`'s `onNode` filter (`&& !hidden[n.id]`); dangling edges
+  fall away via the existing `live[e.s] && live[e.t]` checks. Passed to both
+  `view()` and `viewB()`.
+- **Persistence**: survives dataset switches and mode switches — node ids are
+  shared across datasets, which is the whole point in compare mode. Cleared
+  only by `show all`. (Same rationale as the class filter persisting.)
+- **Hiding the current selection** clears the selection (`select(null)`) — the
+  node it pointed at is gone. A pinned tree root that gets hidden falls back
+  through `effectiveTreeRoot` as usual.
+- **The list**: a `hidden (N) ▾` `toolbar-pill` in the right-aligned cluster
+  (before `view ▾`), rendered only when `hiddenCount > 0`, opening a popover
+  that **reuses the `view` menu's shell verbatim** (`.view-menu__pop` /
+  `__scrim` / `__row` / `__group` / `__row--action`) — this is the third
+  instance of that popover idiom (§12), not a new pattern. Each row is
+  `label` + a right-aligned `×`, click anywhere on it to restore that node;
+  a `show all` action row clears the map. `_onResize` also clears
+  `hiddenMenuOpen`.
+- **Both modes** — unlike the Compare cluster's controls, this sits in the
+  always-visible right cluster. `Del`-to-hide is not compare-specific, and a
+  compare-only list would strand hidden nodes when you leave compare mode.
+- Node identity in the list is `label`, never raw `id` (§7) — resolved against
+  whichever loaded dataset has the node, id as the last-resort fallback.
+
 ## State management
 
 ```
@@ -609,6 +680,9 @@ labels: boolean
 treeWanted: boolean                   // trace-pane toggle; actual visibility also needs colW >= 640
 nsmMetric: string                     // 'none' + NSM_METRICS keys; compare-only, reset to 'none' by showLayers — §3/§4
 nsmState: 'specific' | 'differential' | 'common'
+reachOp: 'off' | 'intersection' | 'difference'  // reach set comparison; compare-only, reset to 'off' by showLayers — §13
+hidden: Record<nodeId, true>          // manually hidden nodes; persists across dataset/mode switches — §14
+hiddenMenuOpen: boolean               // toolbar "hidden (N)" popover — see §14
 open: Record<pathKey, boolean>        // tree row overrides
 baseDepth: number                     // default-open depth
 query: string                         // search box (unwired)

@@ -367,6 +367,9 @@ body {
   color: var(--color-accent-700);
   background: var(--color-accent-100);
 }
+/* Single-glyph variant — the sync status is now carried by the title tooltip,
+   so the badge collapses to just the ⛓ mark. */
+.compare-badge--icon { padding: 5px 8px; }
 
 .nsm-select {
   padding: 5px 9px;
@@ -437,6 +440,16 @@ body {
   border: 1px solid var(--color-neutral-500);
 }
 .view-menu__chk--on { background: var(--color-accent); border-color: var(--color-accent); }
+
+/* ── hidden-nodes popover — reuses the view-menu popover shell (§14) ──── */
+.hidden-menu { position: relative; }
+.hidden-menu__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hidden-menu__x { flex: none; color: var(--color-neutral-500); }
 
 /* ── canvas ──────────────────────────────────────────────────────────── */
 

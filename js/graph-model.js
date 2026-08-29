@@ -99,7 +99,11 @@ function computeNsmMarks(metricKey, state, nodesA, nodesB, otherKeyA, otherKeyB)
 // adjacency, degree and BFS hop-distance (from the selected node) for one
 // graph model under the current UI state.
 function computeView(model, state) {
-  const onNode = n => state.cls[n.cls] && n.layer <= state.active && state.vis[n.layer];
+  // `state.hidden` is the manual hidden-nodes map ({ [id]: true }) — nodes the
+  // user removed with Del / the inspector's "hide node" pill. Absent = {}.
+  // Edges to a hidden node fall away via the `live[e.s] && live[e.t]` checks.
+  const hidden = state.hidden || {};
+  const onNode = n => state.cls[n.cls] && n.layer <= state.active && state.vis[n.layer] && !hidden[n.id];
   let nodes = model.nodes.filter(onNode);
   let live = {};
   nodes.forEach(n => { live[n.id] = n; });

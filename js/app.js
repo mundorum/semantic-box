@@ -108,6 +108,21 @@ createApp({
       // compare mode's second canvas exists.
       nsmMetric: 'none',
       nsmState: 'specific', // 'specific' | 'differential' | 'common'
+
+      // Reach set comparison (compare mode only): narrows each canvas's
+      // BFS-reachable subgraph (from the selected node, respecting Hops /
+      // Direction) to the 'intersection' (reached on both canvases) or
+      // 'difference' (reached on this canvas but not the other). The selected
+      // node itself always stays. 'off' = no narrowing. Reset by showLayers().
+      reachOp: 'off', // 'off' | 'intersection' | 'difference'
+
+      // Manual hidden-nodes map ({ [id]: true }) — same shape/idiom as `cls`.
+      // A node is hidden with Del/Backspace while selected, or the Node tab's
+      // "hide node" pill; restored from the `hidden (N)` toolbar popover.
+      // Persists across dataset switches (ids are shared) — cleared only via
+      // "show all".
+      hidden: {},
+      hiddenMenuOpen: false,
     };
   },
 
@@ -208,6 +223,7 @@ createApp({
         selected: this.selected, hop: this.hop, dir: this.dir,
         active: this.active, vis: this.vis, cls: this.cls,
         qThreshold: this.effectiveQThreshold, hideOrphanMrna: this.hideOrphanMrna,
+        hidden: this.hidden,
       });
     },
 
@@ -225,9 +241,16 @@ createApp({
       return ' · nsm ' + (m ? m.label : this.nsmMetric) + ' ' + this.nsmState;
     },
 
+    // Corner-tag suffix for the reach set comparison — only meaningful with a
+    // selection, in compare mode, when the op isn't 'off'.
+    reachSuffix() {
+      if (!this.isCompare || !this.selected || this.reachOp === 'off') return '';
+      return ' · reach ' + (this.reachOp === 'intersection' ? 'shared' : 'unique');
+    },
+
     cornerTag() {
       const v = this.view;
-      return this.layersMeta[this.active].name + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop' + this.nsmSuffix;
+      return this.layersMeta[this.active].name + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop' + this.nsmSuffix + this.reachSuffix;
     },
 
     layersRender() {
@@ -298,13 +321,14 @@ createApp({
         selected: this.selected, hop: this.hop, dir: this.dir,
         active: this.active, vis: this.vis, cls: this.cls,
         qThreshold: this.effectiveQThreshold, hideOrphanMrna: this.hideOrphanMrna,
+        hidden: this.hidden,
       });
     },
 
     cornerTagB() {
       const v = this.viewB;
       if (!v) return '';
-      return 'L0 · ' + this.dsLabel(this.compareDataset) + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop' + this.nsmSuffix;
+      return 'L0 · ' + this.dsLabel(this.compareDataset) + ' · ' + v.nodes.length + ' n · ' + v.edges.length + ' e · focus ' + this.focus + ' · ' + this.hop + ' hop' + this.nsmSuffix + this.reachSuffix;
     },
 
     nsmMetricOptions() {
@@ -465,10 +489,32 @@ createApp({
       };
     },
 
-    edgesRender() { return this.computeEdgesFor(this.view); },
-    nodesRender() { return this.computeNodesFor(this.view, this.nsmMarks.A, this.hoverA); },
-    edgesRenderB() { return this.viewB ? this.computeEdgesFor(this.viewB) : []; },
-    nodesRenderB() { return this.viewB ? this.computeNodesFor(this.viewB, this.nsmMarks.B, this.hoverB) : []; },
+    // The 4th arg is the OTHER canvas's BFS-reachable set (dist map), consumed
+    // by the reach set comparison (reachOp). null in Layers mode / when there
+    // is no second canvas, which makes the comparison inert.
+    edgesRender() { return this.computeEdgesFor(this.view, this.viewB && this.viewB.dist); },
+    nodesRender() { return this.computeNodesFor(this.view, this.nsmMarks.A, this.hoverA, this.viewB && this.viewB.dist); },
+    edgesRenderB() { return this.viewB ? this.computeEdgesFor(this.viewB, this.view.dist) : []; },
+    nodesRenderB() { return this.viewB ? this.computeNodesFor(this.viewB, this.nsmMarks.B, this.hoverB, this.view.dist) : []; },
+
+    reachOptions() {
+      return [
+        { key: 'off', label: 'off', title: 'no reach comparison' },
+        { key: 'intersection', label: 'shared', title: 'only nodes the selection reaches on BOTH canvases' },
+        { key: 'difference', label: 'unique', title: 'only nodes the selection reaches on THIS canvas but not the other' },
+      ];
+    },
+
+    hiddenCount() { return Object.keys(this.hidden).length; },
+    // id -> { id, label }. Label is resolved against either loaded dataset
+    // (a hidden node may not exist in the currently active one), id as the
+    // last-resort fallback — README §7 (never show a raw id).
+    hiddenRender() {
+      const lookup = {};
+      this.model.nodes.forEach(n => { lookup[n.id] = n.label || n.id; });
+      if (this.modelB) this.modelB.nodes.forEach(n => { if (!lookup[n.id]) lookup[n.id] = n.label || n.id; });
+      return Object.keys(this.hidden).map(id => ({ id, label: lookup[id] || id }));
+    },
   },
 
   methods: {
@@ -476,15 +522,30 @@ createApp({
     // in the compare-only toolbar cluster — so leaving compare mode turns it
     // off, or nodes would keep the NSM label/ring treatment with no visible
     // control to clear it.
-    showLayers() { this.mode = 'layers'; if (this.panel === 'align') this.panel = 'node'; this.railOpen = null; this.inspectorOpen = null; this.nsmMetric = 'none'; },
+    showLayers() { this.mode = 'layers'; if (this.panel === 'align') this.panel = 'node'; this.railOpen = null; this.inspectorOpen = null; this.nsmMetric = 'none'; this.reachOp = 'off'; },
     showCompare() { this.mode = 'compare'; this.panel = 'align'; this.railOpen = null; this.inspectorOpen = null; },
 
     toggleRail() { this.railOpen = !this.railShown; },
     toggleInspector() { this.inspectorOpen = !this.inspectorShown; },
 
-    computeEdgesFor(v) {
+    // Reach set comparison: is node `id` in this side's reachable set but
+    // excluded by the current reachOp (so it should be treated as outside the
+    // subgraph — dimmed, or removed under Focus filter)? Inert when reachOp is
+    // 'off', when there is no other canvas (otherDist null), or for the
+    // selected node itself. See README §13.
+    reachExcluder(v, otherDist) {
+      const other = otherDist || null;
+      return id => {
+        if (this.reachOp === 'off' || !other || v.dist[id] === undefined || id === v.sel) return false;
+        const inOther = other[id] !== undefined;
+        return this.reachOp === 'intersection' ? !inOther : inOther;
+      };
+    },
+
+    computeEdgesFor(v, otherDist) {
       const W = this.canvasWidth, H = this.canvasHeight;
       const alpha = DECAY[this.decayCurve];
+      const reachExcl = this.reachExcluder(v, otherDist);
       // Dim/filter decisions key off the GLOBAL selection (this.selected),
       // not this view's resolved v.sel: in compare mode, a selection that
       // exists in the current dataset but has no counterpart in the other
@@ -499,7 +560,8 @@ createApp({
       v.edges.forEach(e => {
         const a = v.live[e.s], b = v.live[e.t];
         if (!a || !b) return;
-        const both = v.sel && v.dist[e.s] !== undefined && v.dist[e.t] !== undefined;
+        const both = v.sel && v.dist[e.s] !== undefined && v.dist[e.t] !== undefined
+          && !reachExcl(e.s) && !reachExcl(e.t);
         if (filtering && !both) return;
         const hop = both ? Math.max(v.dist[e.s], v.dist[e.t]) : 0;
         const layerOp = (this.op[Math.max(a.layer, b.layer)] ?? 100) / 100;
@@ -521,9 +583,10 @@ createApp({
     // this side's currently-hovered node (see updateHover) — a transient
     // emphasis independent of selection, for picking one node out of a
     // cluster of overlapping ones before committing to a click.
-    computeNodesFor(v, marks, hoverId) {
+    computeNodesFor(v, marks, hoverId, otherDist) {
       const W = this.canvasWidth, H = this.canvasHeight;
       const alpha = DECAY[this.decayCurve];
+      const reachExcl = this.reachExcluder(v, otherDist);
       // See the matching comment in computeEdgesFor: key off the global
       // selection, not this view's own (possibly null) resolved v.sel.
       const filtering = this.focus === 'filter' && this.selected;
@@ -532,7 +595,10 @@ createApp({
       const markableClasses = this.nsmMarkableClasses;
       const out = [];
       v.nodes.forEach(n => {
-        const sub = v.sel && v.dist[n.id] !== undefined;
+        // reachExcl folds the reach set comparison into `sub`: a node the
+        // current reachOp excludes reads as "outside the subgraph" — dimmed,
+        // no hop ring, normal label rule — exactly like a non-reached node.
+        const sub = v.sel && v.dist[n.id] !== undefined && !reachExcl(n.id);
         if (filtering && !sub) return;
         const hop = sub ? v.dist[n.id] : 0;
         const isSel = n.id === v.sel;
@@ -881,6 +947,22 @@ createApp({
 
     setNsmMetric(key) { this.nsmMetric = key; },
     setNsmState(state) { this.nsmState = state; },
+    setReachOp(key) { this.reachOp = key; },
+
+    // Manual hidden nodes: Del/Backspace while a node is selected, or the Node
+    // tab's "hide node" pill. Hiding the current selection clears it (the node
+    // it pointed at just left the view). Restore from the `hidden (N)` popover.
+    hideNode(id) {
+      if (!id) return;
+      this.hidden = Object.assign({}, this.hidden, { [id]: true });
+      if (this.selected === id) this.select(null);
+    },
+    restoreNode(id) {
+      const h = Object.assign({}, this.hidden);
+      delete h[id];
+      this.hidden = h;
+    },
+    restoreAllNodes() { this.hidden = {}; },
 
     toggleLayerVis(i) { const v = this.vis.slice(); v[i] = !v[i]; this.vis = v; },
     setLayerOpacity(i, val) { const o = this.op.slice(); o[i] = +val; this.op = o; },
@@ -918,8 +1000,21 @@ createApp({
       if (this._centerCol) this._ro.observe(this._centerCol);
       if (this._canvasWrap) this._ro.observe(this._canvasWrap);
     }
-    this._onResize = () => { this.viewMenuOpen = false; this.measure(); };
+    this._onResize = () => { this.viewMenuOpen = false; this.hiddenMenuOpen = false; this.measure(); };
     window.addEventListener('resize', this._onResize);
+
+    // Del / Backspace hides the selected node — the app's one keyboard
+    // shortcut. Ignored while a form control has focus (so Backspace still
+    // edits the search box). See README §14.
+    this._onKeyDown = (e) => {
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      const t = document.activeElement;
+      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      if (!this.selected) return;
+      e.preventDefault();
+      this.hideNode(this.selected);
+    };
+    window.addEventListener('keydown', this._onKeyDown);
     this.measure();
 
     try {
@@ -937,5 +1032,6 @@ createApp({
   beforeUnmount() {
     if (this._ro) this._ro.disconnect();
     window.removeEventListener('resize', this._onResize);
+    window.removeEventListener('keydown', this._onKeyDown);
   },
 }).mount('#app');
