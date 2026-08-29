@@ -81,10 +81,10 @@ createApp({
       // dangling edges.
       hideOrphanMrna: false,
 
-      // "Terminal nodes" view toggle (view menu). When true, any node with no
-      // outgoing edge in the current filtered graph is dropped — pathway sinks
-      // and anything left dangling by the other filters. Single pass by
-      // design — see computeView. Default false = shown.
+      // "Dead-end nodes" view toggle (view menu). When true, every non-Pathway
+      // node with no downstream (outgoing) edge is dropped, iterated to a
+      // fixpoint — see computeView. Pathways (the sink class) are never
+      // affected. Default false = shown.
       hideNoDownstream: false,
 
       // Canvas pan/zoom. Shared by both canvases in compare mode — matches

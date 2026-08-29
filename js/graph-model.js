@@ -162,19 +162,28 @@ function computeView(model, state) {
     edges = edges.filter(e => live[e.s] && live[e.t]);
   }
 
-  // "Terminal nodes" view toggle: drop every node with no outgoing edge in the
-  // current filtered graph — the Pathway sinks, plus anything the class /
-  // q-value / orphan filters left with only incoming edges. Deliberately a
-  // SINGLE pass: iterating to a fixpoint would peel every path back through
-  // its source (in a tripartite miR -> mRNA -> Pathway graph every path ends
-  // at a sink) and collapse the graph to nothing.
+  // "Dead-end nodes" view toggle: drop every non-Pathway node that has no
+  // outgoing edge — a MicroRNA or Messenger RNA that doesn't lead anywhere
+  // downstream (e.g. an mRNA with no surviving Pathway link). Iterated to a
+  // fixpoint, so removing a dead-end mRNA also drops any MicroRNA left
+  // pointing only at dead ends — what remains is exactly the nodes that still
+  // participate in a miR -> mRNA -> Pathway chain. Pathways are never removed
+  // here: they are the sink class by design (the analytical endpoint), not a
+  // dead end, and treating them as removable would cascade the whole graph
+  // away (every path ends at a Pathway).
   if (state.hideNoDownstream) {
-    const hasOut = {};
-    edges.forEach(e => { hasOut[e.s] = true; });
-    nodes = nodes.filter(n => hasOut[n.id]);
-    live = {};
-    nodes.forEach(n => { live[n.id] = n; });
-    edges = edges.filter(e => live[e.s] && live[e.t]);
+    let changed = true;
+    while (changed) {
+      const hasOut = {};
+      edges.forEach(e => { hasOut[e.s] = true; });
+      const next = nodes.filter(n => n.cls === 'Pathway' || hasOut[n.id]);
+      changed = next.length !== nodes.length;
+      if (!changed) break;
+      nodes = next;
+      live = {};
+      nodes.forEach(n => { live[n.id] = n; });
+      edges = edges.filter(e => live[e.s] && live[e.t]);
+    }
   }
 
   const out = {}, inn = {}, deg = {};

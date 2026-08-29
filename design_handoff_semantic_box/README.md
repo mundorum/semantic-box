@@ -242,7 +242,7 @@ they stay legible when the row wraps.
 
 - Panels: `rail`, `inspector`, `trace tree` — checkbox rows (`toggleRail` / `toggleInspector` / `toggleTree`). The tick reflects the *shown* state, so `trace tree` reads unchecked at `colW < 640` even when wanted.
 - Canvas overlays: `labels`, `info band`, `minimap` (`toggleLabels` / `toggleCornerTag` / `toggleMinimap`). Default all on. They exist because on a dense layout an overlay can sit on top of graph content the user needs.
-- Canvas filters: `terminal nodes` (`toggleNoDownstream`) — a checkbox row whose tick means *shown* (checked when `!hideNoDownstream`), like the overlay rows. Unchecking it drops every node with no outgoing edge in the current filtered graph — pathway sinks and anything the class / q-value / orphan filters left with only incoming edges. Single pass, not iterated to a fixpoint (see §8-adjacent note / `computeView`). Default shown.
+- Canvas filters: `dead-end nodes` (`toggleNoDownstream`) — a checkbox row whose tick means *shown* (checked when `!hideNoDownstream`), like the overlay rows. Unchecking it hides every **non-Pathway** node with no downstream (outgoing) edge — a MicroRNA or Messenger RNA that doesn't lead anywhere (e.g. an mRNA with no surviving Pathway link). It is **iterated to a fixpoint** in `computeView`, so removing a dead-end mRNA also drops any MicroRNA left pointing only at dead ends; what remains is exactly the nodes still on a miR → mRNA → Pathway chain. Pathways are deliberately exempt — they are the sink class by design, not dead ends, and removing them would cascade the whole graph away. Default shown.
 - `reset pan & zoom` — action row, no checkbox (`resetView`).
 
 Squashed notice (when the trace pane is wanted but the window is too narrow), right after the `view` menu — `1px dashed #c0b6a5`, JetBrains Mono 400 9px, `--color-neutral-600`. Copy: `trace pane needs a wider window`.
@@ -373,7 +373,7 @@ clickable → select. Unmatched B shows `—` and Δ shows `A only`.
 - **Hops** — 1/2/3, sets BFS depth.
 - **Direction** — `down` follows outgoing edges only; `up` follows incoming edges only; `both` follows both. Affects BFS, which of the inspector's outgoing/incoming groups render, and nothing else (the tree is always outgoing).
 - **Mode** — `layers` / `compare` segmented control in the top bar. `showLayers` also clears `nsmMetric` and moves the inspector off `Alignment`; `showCompare` selects the `Alignment` tab. Both reset `railOpen` / `inspectorOpen` to their mode defaults.
-- **View menu** — a toolbar popover (§12) toggling the three side panels (rail, inspector, trace tree), the three canvas overlays (labels, info band, minimap), and the `terminal nodes` canvas filter (hide nodes with no downstream edge), plus a reset-pan/zoom action. Dismiss: click the scrim, or resize the window.
+- **View menu** — a toolbar popover (§12) toggling the three side panels (rail, inspector, trace tree), the three canvas overlays (labels, info band, minimap), and the `dead-end nodes` canvas filter (hide non-Pathway nodes with no downstream edge), plus a reset-pan/zoom action. Dismiss: click the scrim, or resize the window.
 - **Class toggle** — removes that class from the view; layer counts, node counts and edges recompute.
 - **Layer visibility / opacity / active** — active layer sets the ceiling: nodes and edges with `layer > active` are excluded. Per-layer opacity multiplies into node and edge alpha.
 - **Tree expand/collapse** — per-row toggles stored by path key; expand/collapse-all resets toggles and moves the base depth.
@@ -581,7 +581,7 @@ across the top bar and the toolbar with no grouping — the "too many peer
 controls" problem this pass set out to fix. Gathering them behind one `view ▾`
 pill trades a click for a much quieter toolbar; they're all infrequent, so
 that's the right trade. Later low-frequency canvas controls land here too (the
-`terminal nodes` filter — §3). Which
+`dead-end nodes` filter — §3). Which
 consolidation to use here was an explicit product decision — an always-visible
 inline cluster was the alternative; the popover won on "reduces the crowded
 perception."
@@ -605,7 +605,7 @@ use the standard `.08em` uppercase mono. `reset pan & zoom` is an action row
 - **Below the modal**: the modal scrim is `z-index:50`, above this menu's 40/41.
 - **Checkbox truth**: each tick binds to the *effective shown* state (`railShown`
   / `inspectorShown` / `treeShown` / `labels` / `cornerTagShown` /
-  `minimapShown`, and `!hideNoDownstream` for `terminal nodes`), not a raw
+  `minimapShown`, and `!hideNoDownstream` for `dead-end nodes`), not a raw
   wanted-flag — so `trace tree` reads unchecked at `colW < 640` even when
   `treeWanted`.
 
@@ -711,7 +711,7 @@ query: string                         // search box (unwired)
 colW, paneH: number                   // measured column box — see layout constraint
 qThreshold: number | null             // null = follow the dataset's max (unfiltered) — see §8
 hideOrphanMrna: boolean               // default false — see §8
-hideNoDownstream: boolean             // view-menu "terminal nodes" filter; default false (shown) — see §3/§12
+hideNoDownstream: boolean             // view-menu "dead-end nodes" filter; default false (shown) — see §3/§12
 viewTransform: { x, y, k }            // pan/zoom, shared across compare-mode canvases — see §4
 hoverA, hoverB: nodeId | null          // per-side hover emphasis, never synced — see §11
 activeDataset, compareDataset: string // dataset keys, kept distinct — see §9

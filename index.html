@@ -212,8 +212,8 @@
               </button>
               <div class="view-menu__group">Canvas filters</div>
               <button class="view-menu__row" @click="toggleNoDownstream"
-                      title="hide nodes with no downstream (outgoing) connections — pathway sinks and other dead ends">
-                <span class="view-menu__chk" :class="{ 'view-menu__chk--on': !hideNoDownstream }"></span>terminal nodes
+                      title="hide miRNA / mRNA nodes with no downstream (outgoing) edge — dead ends that don't lead to a pathway; pathways themselves are kept">
+                <span class="view-menu__chk" :class="{ 'view-menu__chk--on': !hideNoDownstream }"></span>dead-end nodes
               </button>
               <button class="view-menu__row view-menu__row--action" @click="resetView">reset pan &amp; zoom</button>
             </div>
