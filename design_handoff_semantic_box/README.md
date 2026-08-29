@@ -255,7 +255,7 @@ See the two-palette section for ground, grid, hairline, node and edge colour.
 - **Node opacity**: `decayAlpha[min(hop,3)] × (layerOpacity/100)`. Nodes outside the subgraph go to `0.1` (or are removed entirely in `filter` mode).
 - **Labels** (when labels are on): shown for the selected node, any node at hop ≤ 2, and **always** for `case` nodes. JetBrains Mono, 11px selected / 9px otherwise, `fill: #201e1d`, `fillOpacity: max(op, 0.55)`, `pointer-events:none`. (Raised from hop ≤ 1 to hop ≤ 2 — with the tripartite dataset, a 2-hop BFS from a MicroRNA node reaches its Pathways only at hop 2, and those were going unlabelled even though the hop-ring and edges already made them visually part of the subgraph.)
   Placement measures the string (mono advance ≈ 0.6em → `len × 6.6` selected, `× 5.4` otherwise) and draws right of the node by default; **flips to the left only if the flipped position also fits**, and both branches clamp inside the box (6px inset) so labels never run off either edge.
-  **NSM mode** (`by` metric ≠ `off` in the compare-mode Compare cluster — §3) normally replaces this rule with "only NSM-marked nodes get a label," so a few hundred faded genes don't bury the handful that matter for the metric. But that restriction must be scoped **per node class**, not applied globally: check it against `nsmMarkableClasses` — the set of classes that have *any* non-null `n.nsm[metricKey]` entry anywhere in either loaded dataset — and only suppress the normal label rule for a node whose own class is in that set. NSM analysis today is computed exclusively for MicroRNA (see `js/data-loader.js` — Messenger RNA and Pathway rows always parse to `[]`/`null`), so `nsmMarkableClasses` never contains those two classes; a node of either class keeps the ordinary "selected + hop ≤ 2" label rule regardless of whether Compare By is on. Getting this wrong — checking "does *any* mark exist anywhere" instead of "can *this node's class* ever be marked" — reads as: turn on any metric, and every Messenger RNA and Pathway label vanishes instantly, permanently, for as long as Compare By stays on, even though they're still visibly part of the highlighted subgraph (hop rings, edges, opacity all still show it). The `examples/old/luminal-{a,b}_nodes.csv` files (kept in the repo for testing only, not wired into the app's dataset list) carry the real NSM columns and per-node metrics, and are the only current fixture that exercises this path — upload them via "manage graphs" (§10) to test Compare By against real data. Every dataset actually shipped for normal use has no NSM data at all, which is exactly why this bug was invisible until Compare By was tested against a dataset that actually has metrics.
+  **NSM mode** (`by` metric ≠ `off` in the compare-mode Compare cluster — §3) normally replaces this rule with "only NSM-marked nodes (**or** the selected node) get a label," so a few hundred faded genes don't bury the handful that matter for the metric — while a node the user has actually clicked still shows its label on *both* canvases (selection is shared by id), even when it carries no NSM mark on one side. But that restriction must be scoped **per node class**, not applied globally: check it against `nsmMarkableClasses` — the set of classes that have *any* non-null `n.nsm[metricKey]` entry anywhere in either loaded dataset — and only suppress the normal label rule for a node whose own class is in that set. NSM analysis today is computed exclusively for MicroRNA (see `js/data-loader.js` — Messenger RNA and Pathway rows always parse to `[]`/`null`), so `nsmMarkableClasses` never contains those two classes; a node of either class keeps the ordinary "selected + hop ≤ 2" label rule regardless of whether Compare By is on. Getting this wrong — checking "does *any* mark exist anywhere" instead of "can *this node's class* ever be marked" — reads as: turn on any metric, and every Messenger RNA and Pathway label vanishes instantly, permanently, for as long as Compare By stays on, even though they're still visibly part of the highlighted subgraph (hop rings, edges, opacity all still show it). Several shipped datasets now carry the full NSM column set (`examples/luminal-{a,b}_nodes.csv`, `basal-like`, `her2-enriched`), so Compare By against `luminal-a` — the default active dataset — exercises this path directly; `normal_nodes.csv` still has only `id,label,type` and is the case to test the "no NSM data at all" fallback against. The `examples/old/luminal-{a,b}_nodes.csv` fixtures are retained for regression testing and are not wired into the dataset list.
 - Clicking a node selects it; clicking bare SVG background clears the selection.
 - **Corner tag** — top-left pill, `1px solid divider`, `background:#f9f4ed`, JetBrains Mono 400 10px, `--color-neutral-700`, ellipsised. Reads `L3 · clustered · 118 n · 190 e · focus highlight · 2 hop`; in compare mode prefixed `A · ` / `B · `. Hideable via the `view` menu's `info band` row — it can sit on top of nodes near the top-left corner on a dense layout.
 - **Minimap** — bottom-right, 104×68, `radius 6px`, `1px solid #c0b6a5`, `background:#f9f4ed`, containing a viewport rect, `1px solid #c67139`, `radius 3px`. Wired to the real pan/zoom transform: rect `left/top/width/height` are `-panX/k`, `-panY/k`, `100/k`, `100/k` percent of the canvas box. `overflow:hidden` on the minimap crops the rect when panned/zoomed past the edge rather than letting it escape the box. Hideable via the `view` menu's `minimap` row, independently of the corner tag — same rationale.
@@ -407,8 +407,10 @@ threshold filter**, styled as a new rail section following the existing
 - A native `input[type=range]` spanning the dataset's actual observed
   min→max q-value (not a fixed 0–1 range), `accent-color: var(--color-accent)`
   matching every other slider in the app (see the layer-card opacity slider).
-  Reads "q ≥ &lt;value&gt; · N pathways shown" beneath it.
-- **Semantics**: an edge survives when `edge.qvalue >= threshold`. A Pathway
+  Reads "q ≤ &lt;value&gt; · N pathways shown" beneath it.
+- **Semantics**: an edge survives when `edge.qvalue <= threshold` — the slider
+  keeps mRNA · pathway connections at or *below* the chosen significance value
+  and hides the less-significant ones above it. A Pathway
   with zero surviving edges is removed from the view entirely — not dimmed,
   not just edge-less — same "hide, don't fade" treatment `filter` focus mode
   already gives non-subgraph nodes.
@@ -419,9 +421,9 @@ threshold filter**, styled as a new rail section following the existing
   this app, switches between showing and hiding orphans. Default is **show**
   (`hideOrphanMrna: false`) — the q-value filter should not silently prune
   more of the graph than the user explicitly asked for until they opt in.
-- Resets to the dataset's own minimum (i.e. unfiltered) on dataset switch,
-  same `null`-follows-default idiom used elsewhere in the state (see
-  `railOpen`/`treeShown`).
+- Resets to the dataset's own maximum (i.e. unfiltered — every edge is at or
+  below the max) on dataset switch, same `null`-follows-default idiom used
+  elsewhere in the state (see `railOpen`/`treeShown`).
 
 ### 9. Five example datasets, and a second selector for Compare mode's B side
 
@@ -611,7 +613,7 @@ open: Record<pathKey, boolean>        // tree row overrides
 baseDepth: number                     // default-open depth
 query: string                         // search box (unwired)
 colW, paneH: number                   // measured column box — see layout constraint
-qThreshold: number | null             // null = follow the dataset's min (unfiltered) — see §8
+qThreshold: number | null             // null = follow the dataset's max (unfiltered) — see §8
 hideOrphanMrna: boolean               // default false — see §8
 viewTransform: { x, y, k }            // pan/zoom, shared across compare-mode canvases — see §4
 hoverA, hoverB: nodeId | null          // per-side hover emphasis, never synced — see §11

@@ -106,10 +106,10 @@ function computeView(model, state) {
   let edges = model.edges.filter(e => live[e.s] && live[e.t] && e.layer <= state.active);
 
   // q-value filter: a Messenger RNA -> Pathway edge survives only when its
-  // q-value is >= the slider threshold. Edges with no q-value (MicroRNA ->
+  // q-value is <= the slider threshold. Edges with no q-value (MicroRNA ->
   // Messenger RNA) are never affected by this filter.
-  const qThreshold = state.qThreshold ?? -Infinity;
-  edges = edges.filter(e => e.qvalue === null || e.qvalue === undefined || e.qvalue >= qThreshold);
+  const qThreshold = state.qThreshold ?? Infinity;
+  edges = edges.filter(e => e.qvalue === null || e.qvalue === undefined || e.qvalue <= qThreshold);
 
   // A Pathway with no surviving edge is hidden entirely — not just dimmed.
   const pathwayHasEdge = {};

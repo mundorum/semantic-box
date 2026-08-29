@@ -76,7 +76,7 @@ createApp({
       minimapShown: true,
 
       // Messenger RNA -> Pathway q-value filter. null = follow the current
-      // dataset's minimum (i.e. no filtering) — same null-follows-default
+      // dataset's maximum (i.e. no filtering) — same null-follows-default
       // idiom as railOpen/inspectorOpen. Reset to null on dataset switch so
       // the slider re-defaults to the new dataset's own q-value range.
       qThreshold: null,
@@ -191,7 +191,7 @@ createApp({
       return Math.max(1e-6, (r.max - r.min) / 200);
     },
     effectiveQThreshold() {
-      return this.qThreshold === null ? this.qRange.min : this.qThreshold;
+      return this.qThreshold === null ? this.qRange.max : this.qThreshold;
     },
     qRangeRender() {
       const r = this.qRange;
@@ -560,9 +560,13 @@ createApp({
         // those two classes would go permanently unlabelled the instant any
         // metric is picked. A hovered node always gets its label, on top of
         // whichever of those two rules is in force — that's the point of hovering.
+        // The selected node (and, in compare mode, its echoed counterpart on
+        // the other canvas — selection is shared by id) always keeps its label
+        // too, even when it carries no NSM mark, so a picked node stays legible
+        // on both sides.
         const mark = marks[n.id];
         const showLabel = isHovered || (nsmActive && markableClasses.has(n.cls)
-          ? (this.labels && !!mark)
+          ? (this.labels && (!!mark || isSel))
           : (this.labels && (isSel || (sub && hop <= 2))));
         const labelText = n.label || n.id;
         const tw = String(labelText).length * (emph ? 6.6 : 5.4);

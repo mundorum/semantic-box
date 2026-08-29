@@ -92,11 +92,11 @@
             <div class="q-legend__row">
               <span class="q-legend__bound">[[ qRangeRender.minLabel ]]</span>
               <input type="range" class="q-slider" :min="qRange.min" :max="qRange.max" :step="qStep"
-                     :value="effectiveQThreshold" title="show only mRNA · pathway connections with q ≥ this value"
+                     :value="effectiveQThreshold" title="show only mRNA · pathway connections with q ≤ this value"
                      @input="setQThreshold($event.target.value)">
               <span class="q-legend__bound">[[ qRangeRender.maxLabel ]]</span>
             </div>
-            <div class="q-legend__value">q ≥ [[ qRangeRender.currentLabel ]] · [[ qRangeRender.pathwayCount ]] pathways shown</div>
+            <div class="q-legend__value">q ≤ [[ qRangeRender.currentLabel ]] · [[ qRangeRender.pathwayCount ]] pathways shown</div>
             <button class="toolbar-pill q-orphan-toggle" @click="toggleHideOrphanMrna"
                     title="mRNAs whose pathway connections were all filtered out by the q-value slider">
               <span class="pill__active-overlay" v-if="hideOrphanMrna"></span>
