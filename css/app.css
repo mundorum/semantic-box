@@ -382,6 +382,12 @@ body {
 }
 .nsm-select:hover { border-color: var(--color-accent); }
 
+/* Jaccard-cutoff slider in the compare cluster — native range, same
+   accent-color idiom as the rail's q-value / layer-opacity sliders. */
+.nsm-jaccard { display: flex; align-items: center; gap: 7px; }
+.nsm-jaccard__slider { width: 88px; accent-color: var(--color-accent); height: 14px; margin: 0; }
+.nsm-jaccard__value { font: 400 9px/1 var(--font-mono); color: var(--color-neutral-700); white-space: nowrap; }
+
 /* ── view menu — toolbar popover gathering every panel + overlay toggle ──
    A deliberate second departure from the "reuse an existing idiom" rule
    (the modal in §10 was the first). It borrows the modal's surface tokens

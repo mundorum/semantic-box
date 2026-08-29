@@ -23,7 +23,7 @@ createApp({
       railOpen: null,
       inspectorOpen: null,
 
-      // The five built-in subtype snapshots seed `datasetMeta` (label +
+      // The built-in subtype snapshots seed `datasetMeta` (label +
       // whether it's a built-in vs. a user-uploaded graph); `datasetKeys`
       // (computed) is just its key order, so adding/removing a graph is
       // adding/removing one datasetMeta entry — see "manage graphs" in
@@ -35,15 +35,11 @@ createApp({
       datasetMeta: Object.fromEntries(
         Object.keys(DATASET_LABELS).map(k => [k, { label: DATASET_LABELS[k], builtin: true }])
       ),
-      datasets: {
-        'normal': { nodes: [], edges: [] },
-        'basal-like': { nodes: [], edges: [] },
-        'her2-enriched': { nodes: [], edges: [] },
-        'luminal-a': { nodes: [], edges: [] },
-        'luminal-b': { nodes: [], edges: [] },
-      },
+      datasets: Object.fromEntries(
+        Object.keys(DATASET_LABELS).map(k => [k, { nodes: [], edges: [] }])
+      ),
       activeDataset: 'luminal-a',
-      compareDataset: 'luminal-b',
+      compareDataset: 'basal-like',
       loadError: null,
       decayCurve: 'standard',
 
@@ -107,7 +103,12 @@ createApp({
       // loaded), but the echo half of it only has somewhere to render once
       // compare mode's second canvas exists.
       nsmMetric: 'none',
-      nsmState: 'specific', // 'specific' | 'differential' | 'common'
+      nsmState: 'specific', // 'specific' | 'conserved' | 'rewired' — see §4
+      // Jaccard similarity that splits a 'shared' NSM classification into
+      // 'conserved' (>= cutoff) and 'rewired' (< cutoff). User-tunable via a
+      // slider in the compare cluster; no canonical value, so it's just a
+      // sensible midpoint by default.
+      nsmJaccardCutoff: 0.5,
 
       // Reach set comparison (compare mode only): narrows each canvas's
       // BFS-reachable subgraph (from the selected node, respecting Hops /
@@ -189,14 +190,15 @@ createApp({
       }];
     },
 
-    // Actual min/max q-value across this dataset's Messenger RNA -> Pathway
-    // edges — the slider's own range, recomputed whenever the dataset changes.
+    // Actual min/max q-value across this dataset's Pathway nodes — the slider's
+    // own range, recomputed whenever the dataset changes. (The q-value moved
+    // from the mRNA -> Pathway edge onto the Pathway node — see computeView.)
     qRange() {
       let min = Infinity, max = -Infinity;
-      this.model.edges.forEach(e => {
-        if (e.qvalue === null || e.qvalue === undefined || Number.isNaN(e.qvalue)) return;
-        if (e.qvalue < min) min = e.qvalue;
-        if (e.qvalue > max) max = e.qvalue;
+      this.model.nodes.forEach(n => {
+        if (n.cls !== 'Pathway' || n.qvalue === null || n.qvalue === undefined || Number.isNaN(n.qvalue)) return;
+        if (n.qvalue < min) min = n.qvalue;
+        if (n.qvalue > max) max = n.qvalue;
       });
       if (!Number.isFinite(min)) { min = 0; max = 1; }
       return { min, max };
@@ -339,7 +341,7 @@ createApp({
     nsmMarks() {
       if (this.nsmMetric === 'none') return { A: {}, B: {} };
       return computeNsmMarks(
-        this.nsmMetric, this.nsmState,
+        this.nsmMetric, this.nsmState, this.nsmJaccardCutoff,
         this.model.nodes, this.modelB.nodes,
         this.compareDataset, this.activeDataset
       );
@@ -399,22 +401,28 @@ createApp({
       }));
     },
 
-    // Raw per-node analysis metrics from the CSVs (module/component + the
-    // centrality/redundancy/pathway metrics NSM ranks are derived from).
+    // Raw per-node analysis metrics from the CSVs (connected component + the
+    // centrality/redundancy/pathway metrics NSM ranks are derived from, plus a
+    // Pathway node's own q-value).
     nodeRawMetrics() {
       const sel = this.selNode;
       if (!sel || !sel.metrics) return [];
       const m = sel.metrics;
       const fmt = v => (v === null || v === undefined || Number.isNaN(v)) ? '—' : v.toFixed(3);
-      return [
-        { label: 'module · component', value: m.moduleId + ' · ' + m.componentId + (m.inLargestComponent ? ' (largest)' : '') },
+      const rows = [];
+      if (sel.cls === 'Pathway' && sel.qvalue != null && !Number.isNaN(sel.qvalue)) {
+        rows.push({ label: 'pathway q-value', value: sel.qvalue < 1e-3 ? sel.qvalue.toExponential(2) : sel.qvalue.toFixed(4) });
+      }
+      rows.push(
+        { label: 'connected component', value: (m.componentId === '' || m.componentId === undefined || Number.isNaN(parseFloat(m.componentId)) ? '—' : String(parseInt(m.componentId, 10))) + (m.inLargestComponent ? ' (largest)' : '') },
         { label: 'betweenness centrality', value: fmt(m.betweenness) },
         { label: 'closeness centrality', value: fmt(m.closeness) },
         { label: 'degree centrality', value: fmt(m.degree) },
         { label: 'redundancy coefficient', value: fmt(m.redundancy) },
         { label: 'pathway reach', value: fmt(m.pathwayReach) },
         { label: 'functional impact', value: fmt(m.functionalImpact) },
-      ];
+      );
+      return rows;
     },
 
     nodeGroups() {
@@ -947,6 +955,7 @@ createApp({
 
     setNsmMetric(key) { this.nsmMetric = key; },
     setNsmState(state) { this.nsmState = state; },
+    setNsmJaccardCutoff(val) { this.nsmJaccardCutoff = parseFloat(val); },
     setReachOp(key) { this.reachOp = key; },
 
     // Manual hidden nodes: Del/Backspace while a node is selected, or the Node

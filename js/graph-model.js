@@ -15,15 +15,13 @@ const DECAY = {
   steep: [1, 0.85, 0.35, 0.12],
 };
 
-// Short display labels for the five breast-cancer-subtype example datasets —
+// Short display labels for the breast-cancer-subtype example datasets —
 // the dataset key doubles as the examples/<key>_{nodes,edges}.csv prefix, so
-// it can't just be shortened outright; this is copy only.
+// it can't just be shortened outright; this is copy only. Two snapshots ship
+// by default (`basal-like`, `luminal-a`); more can be added via "manage graphs".
 const DATASET_LABELS = {
-  'normal': 'normal',
   'basal-like': 'basal',
-  'her2-enriched': 'her2',
   'luminal-a': 'luminal-a',
-  'luminal-b': 'luminal-b',
 };
 
 // Turns an arbitrary display name (typed by the user when adding a graph)
@@ -64,28 +62,45 @@ const NSM_METRICS = [
   { key: 'functional_impact_descending', label: 'functional impact (desc)' },
 ];
 
+// NSM classification states the comparison can mark:
+//   'specific'  — this node is a high-p node for the metric in THIS dataset only.
+//   'shared'    — it's also high-p in one other dataset; the CSV cell carries
+//                 that dataset's display name and a Jaccard similarity of the
+//                 two neighbourhoods. 'shared' is never selected directly —
+//                 the UI splits it, by a user-set Jaccard cutoff, into:
+//                   'conserved' — jaccard >= cutoff (wiring is similar in both)
+//                   'rewired'   — jaccard <  cutoff (same node, different wiring)
+// `info.other` is a dataset *display name* ('Luminal A'), so it's slugified
+// before comparing against the dataset *key* ('luminal-a').
+function nsmStateMatches(info, state, cutoff) {
+  if (!info) return false;
+  if (state === 'specific') return info.state === 'specific';
+  if (info.state !== 'shared') return false;
+  const j = info.jaccard == null ? 0 : info.jaccard;
+  return state === 'conserved' ? j >= cutoff : j < cutoff;
+}
+
 // Builds the per-side highlight marks for one NSM metric+state: an "own"
-// (strong) mark on the side whose classification actually says
-// specific/common/differential, and — for common/differential only — a
-// fainter "echo" mark on the other side in the SAME colour, so the same
-// node X can be spotted on both canvases. Nodes not present in a side (no
-// matching id) simply get no mark there.
-function computeNsmMarks(metricKey, state, nodesA, nodesB, otherKeyA, otherKeyB) {
+// (strong) mark on the side whose classification actually matches, and — for
+// the conserved/rewired (shared) states only — a fainter "echo" mark on the
+// other side in the SAME colour, so the same node X can be spotted on both
+// canvases. Nodes not present in a side (no matching id) simply get no mark there.
+function computeNsmMarks(metricKey, state, cutoff, nodesA, nodesB, otherKeyA, otherKeyB) {
   const marksA = {}, marksB = {};
   const ownPass = (nodes, marks, color) => {
     nodes.forEach(n => {
       const info = n.nsm[metricKey];
-      if (!info || info.state !== state) return;
-      marks[n.id] = { state: info.state, strong: true, color };
+      if (!nsmStateMatches(info, state, cutoff)) return;
+      marks[n.id] = { state, strong: true, color };
     });
   };
   const echoPass = (nodes, otherKey, marksOther, color) => {
     if (state === 'specific') return; // nothing to echo — specific means absent elsewhere
     nodes.forEach(n => {
       const info = n.nsm[metricKey];
-      if (!info || info.state !== state) return;
-      if (info.other !== otherKey) return;
-      if (!marksOther[n.id]) marksOther[n.id] = { state: info.state, strong: false, color };
+      if (!nsmStateMatches(info, state, cutoff)) return;
+      if (!info.other || slugify(info.other) !== otherKey) return;
+      if (!marksOther[n.id]) marksOther[n.id] = { state, strong: false, color };
     });
   };
   ownPass(nodesA, marksA, NSM_IDENTITY.A);
@@ -103,17 +118,21 @@ function computeView(model, state) {
   // user removed with Del / the inspector's "hide node" pill. Absent = {}.
   // Edges to a hidden node fall away via the `live[e.s] && live[e.t]` checks.
   const hidden = state.hidden || {};
-  const onNode = n => state.cls[n.cls] && n.layer <= state.active && state.vis[n.layer] && !hidden[n.id];
+
+  // q-value filter: the q-value now lives on the Pathway node itself (it moved
+  // off the Messenger RNA -> Pathway edges — see js/data-loader.js). A Pathway
+  // survives only when its q-value is <= the slider threshold; the mRNA/miR
+  // classes carry no q-value and are never touched by it. Edges to a filtered
+  // Pathway fall away through the `live[e.s] && live[e.t]` checks, exactly like
+  // edges to a hidden node.
+  const qThreshold = state.qThreshold ?? Infinity;
+  const qOK = n => !(n.cls === 'Pathway' && n.qvalue != null && !Number.isNaN(n.qvalue) && n.qvalue > qThreshold);
+
+  const onNode = n => state.cls[n.cls] && n.layer <= state.active && state.vis[n.layer] && !hidden[n.id] && qOK(n);
   let nodes = model.nodes.filter(onNode);
   let live = {};
   nodes.forEach(n => { live[n.id] = n; });
   let edges = model.edges.filter(e => live[e.s] && live[e.t] && e.layer <= state.active);
-
-  // q-value filter: a Messenger RNA -> Pathway edge survives only when its
-  // q-value is <= the slider threshold. Edges with no q-value (MicroRNA ->
-  // Messenger RNA) are never affected by this filter.
-  const qThreshold = state.qThreshold ?? Infinity;
-  edges = edges.filter(e => e.qvalue === null || e.qvalue === undefined || e.qvalue <= qThreshold);
 
   // A Pathway with no surviving edge is hidden entirely — not just dimmed.
   const pathwayHasEdge = {};

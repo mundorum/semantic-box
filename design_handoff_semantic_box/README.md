@@ -233,7 +233,7 @@ they stay legible when the row wraps.
 **Compare cluster** — rendered **only in compare mode** (`v-if="isCompare"`), after a hairline rule:
 
 - `Compare` section label, then `vs` + a dataset `<select>` (`.nsm-select`) choosing side B / the Alignment tab's B (`compareDataset` — §9).
-- `by` + a metric `<select>` (`.nsm-select`) — the NSM (node-specificity-by-metric) picker; first option is `off`. When a metric is chosen, a `specific` / `differential` / `common` segmented control follows.
+- `by` + a metric `<select>` (`.nsm-select`) — the NSM (node-specificity-by-metric) picker; first option is `off`. When a metric is chosen, a `specific` / `conserved` / `rewired` segmented control follows, and — for `conserved` / `rewired` only — a `split` Jaccard-cutoff slider (`.nsm-jaccard`, native `input[type=range]` 0–1, `accent-color: var(--color-accent)`, with a `J ≥ N.NN` readout). See §4 for what `conserved` / `rewired` mean and why the cutoff is user-set.
 - `Reach` — an `off` / `shared` / `unique` segmented control (`reachOp`), the reach set comparison (§13). Compare-only; reset to `off` by `showLayers` alongside `nsmMetric`.
 - Compare-mode badge — now a bare `⛓` glyph (`.compare-badge.compare-badge--icon`), same `1px solid #c67139` / `background:#fff2eb` pill, with the former copy (`pan, zoom, active layer and selection stay in sync across both canvases`) moved to its `title` tooltip. It was a full-width label; the sync it announces is real (§4) but the text was crowding the cluster, so it shrank to its icon.
 - NSM is a cross-dataset feature, so it lives here and nowhere else. `showLayers` sets `nsmMetric = 'none'` on the way out, or nodes keep the NSM label/ring treatment with no visible control to clear it.
@@ -256,7 +256,9 @@ See the two-palette section for ground, grid, hairline, node and edge colour.
 - **Node opacity**: `decayAlpha[min(hop,3)] × (layerOpacity/100)`. Nodes outside the subgraph go to `0.1` (or are removed entirely in `filter` mode).
 - **Labels** (when labels are on): shown for the selected node, any node at hop ≤ 2, and **always** for `case` nodes. JetBrains Mono, 11px selected / 9px otherwise, `fill: #201e1d`, `fillOpacity: max(op, 0.55)`, `pointer-events:none`. (Raised from hop ≤ 1 to hop ≤ 2 — with the tripartite dataset, a 2-hop BFS from a MicroRNA node reaches its Pathways only at hop 2, and those were going unlabelled even though the hop-ring and edges already made them visually part of the subgraph.)
   Placement measures the string (mono advance ≈ 0.6em → `len × 6.6` selected, `× 5.4` otherwise) and draws right of the node by default; **flips to the left only if the flipped position also fits**, and both branches clamp inside the box (6px inset) so labels never run off either edge.
-  **NSM mode** (`by` metric ≠ `off` in the compare-mode Compare cluster — §3) normally replaces this rule with "only NSM-marked nodes (**or** the selected node) get a label," so a few hundred faded genes don't bury the handful that matter for the metric — while a node the user has actually clicked still shows its label on *both* canvases (selection is shared by id), even when it carries no NSM mark on one side. But that restriction must be scoped **per node class**, not applied globally: check it against `nsmMarkableClasses` — the set of classes that have *any* non-null `n.nsm[metricKey]` entry anywhere in either loaded dataset — and only suppress the normal label rule for a node whose own class is in that set. NSM analysis today is computed exclusively for MicroRNA (see `js/data-loader.js` — Messenger RNA and Pathway rows always parse to `[]`/`null`), so `nsmMarkableClasses` never contains those two classes; a node of either class keeps the ordinary "selected + hop ≤ 2" label rule regardless of whether Compare By is on. Getting this wrong — checking "does *any* mark exist anywhere" instead of "can *this node's class* ever be marked" — reads as: turn on any metric, and every Messenger RNA and Pathway label vanishes instantly, permanently, for as long as Compare By stays on, even though they're still visibly part of the highlighted subgraph (hop rings, edges, opacity all still show it). Several shipped datasets now carry the full NSM column set (`examples/luminal-{a,b}_nodes.csv`, `basal-like`, `her2-enriched`), so Compare By against `luminal-a` — the default active dataset — exercises this path directly; `normal_nodes.csv` still has only `id,label,type` and is the case to test the "no NSM data at all" fallback against. The `examples/old/luminal-{a,b}_nodes.csv` fixtures are retained for regression testing and are not wired into the dataset list.
+  **NSM mode** (`by` metric ≠ `off` in the compare-mode Compare cluster — §3) normally replaces this rule with "only NSM-marked nodes (**or** the selected node) get a label," so a few hundred faded genes don't bury the handful that matter for the metric — while a node the user has actually clicked still shows its label on *both* canvases (selection is shared by id), even when it carries no NSM mark on one side. But that restriction must be scoped **per node class**, not applied globally: check it against `nsmMarkableClasses` — the set of classes that have *any* non-null `n.nsm[metricKey]` entry anywhere in either loaded dataset — and only suppress the normal label rule for a node whose own class is in that set. NSM analysis today is computed exclusively for MicroRNA (see `js/data-loader.js` — Messenger RNA and Pathway rows always parse to `[]`/`null`), so `nsmMarkableClasses` never contains those two classes; a node of either class keeps the ordinary "selected + hop ≤ 2" label rule regardless of whether Compare By is on. Getting this wrong — checking "does *any* mark exist anywhere" instead of "can *this node's class* ever be marked" — reads as: turn on any metric, and every Messenger RNA and Pathway label vanishes instantly, permanently, for as long as Compare By stays on, even though they're still visibly part of the highlighted subgraph (hop rings, edges, opacity all still show it). Both shipped datasets (`examples/basal-like_nodes.csv`, `examples/luminal-a_nodes.csv`) carry the full NSM column set, so Compare By against either exercises this path directly. The "no NSM data at all" fallback (`nsmMarkableClasses` empty → every class keeps the ordinary label rule) is not exercised by shipped data any more; the case to test it against is an uploaded nodes CSV with only `id,label,type`.
+
+  **NSM classification states.** Each `*_descending` / `*_ascending` cell parses (`parseNsmCell`) to one of: nothing (`[]` — not a high-p node for this metric); `specific` (`[['specific']]` — high-p in *this* dataset only); or `shared` (`[['shared', otherDatasetDisplayName, jaccard]]` — also high-p in one other dataset, with the Jaccard similarity of the two neighbourhoods). The comparison never marks `shared` directly — it splits it, by the user's `split` Jaccard cutoff (§3), into **`conserved`** (`jaccard ≥ cutoff` — the wiring around the node is similar in both datasets) and **`rewired`** (`jaccard < cutoff` — same node, meaningfully different wiring). There is no canonical cutoff, hence the slider; it defaults to `0.5`. `computeNsmMarks(metricKey, state, cutoff, …)` folds this through `nsmStateMatches`; `specific` still gets an own-side-only strong mark with no echo, `conserved` / `rewired` get the strong mark plus the faint same-colour echo on the other canvas (`info.other` is a dataset *display name*, so it's `slugify`'d before matching the dataset *key*).
 - Clicking a node selects it; clicking bare SVG background clears the selection.
 - **Corner tag** — top-left pill, `1px solid divider`, `background:#f9f4ed`, JetBrains Mono 400 10px, `--color-neutral-700`, ellipsised. Reads `L3 · clustered · 118 n · 190 e · focus highlight · 2 hop`; in compare mode prefixed `A · ` / `B · `. Hideable via the `view` menu's `info band` row — it can sit on top of nodes near the top-left corner on a dense layout.
 - **Minimap** — bottom-right, 104×68, `radius 6px`, `1px solid #c0b6a5`, `background:#f9f4ed`, containing a viewport rect, `1px solid #c67139`, `radius 3px`. Wired to the real pan/zoom transform: rect `left/top/width/height` are `-panX/k`, `-panY/k`, `100/k`, `100/k` percent of the canvas box. `overflow:hidden` on the minimap crops the rect when panned/zoomed past the edge rather than letting it escape the box. Hideable via the `view` menu's `minimap` row, independently of the corner tag — same rationale.
@@ -280,7 +282,7 @@ a 1px divider, each at half width. Selection, active layer, class filters and
 focus settings are shared across both. Side A is `activeDataset` (the top-bar
 dataset seg); side B is `compareDataset`, chosen from a `vs` select in the
 toolbar's Compare cluster (§3, visible only in Compare mode) — see §9 for why a
-separate B picker exists now that there are five candidate datasets instead of two.
+separate B picker exists rather than B just being "the other dataset".
 
 **Unmatched selection.** The shared `selected` id is looked up independently
 in each dataset — see §9's `matchLabel`/Alignment-tab description. When that
@@ -400,22 +402,28 @@ any future class whose id and display name diverge.
 ### 8. Pathway q-value filter (real-data addition, not in the original prototype)
 
 The reference prototype's synthetic model has no concept of statistical
-significance on an edge. The real tripartite dataset does: every Messenger
-RNA → Pathway edge carries a q-value (MicroRNA → Messenger RNA edges do not —
-they carry a correlation instead). The production build adds a **q-value
-threshold filter**, styled as a new rail section following the existing
-`hop-legend` pattern (title + control, in `.rail-bottom`, top divider):
+significance. The real tripartite dataset does: every **Pathway node** carries
+a q-value (its enrichment significance). *(Schema note: this q-value used to
+sit on the Messenger RNA → Pathway edge; it moved onto the Pathway node, and
+those edges now carry nothing — the presence of a `correlation` value is what
+distinguishes a MicroRNA → Messenger RNA edge from a Messenger RNA → Pathway
+one. MicroRNA / Messenger RNA nodes leave `qvalue` blank.)* The production
+build adds a **q-value threshold filter**, styled as a new rail section
+following the existing `hop-legend` pattern (title + control, in
+`.rail-bottom`, top divider):
 
 - A native `input[type=range]` spanning the dataset's actual observed
-  min→max q-value (not a fixed 0–1 range), `accent-color: var(--color-accent)`
+  min→max Pathway q-value (not a fixed 0–1 range), `accent-color: var(--color-accent)`
   matching every other slider in the app (see the layer-card opacity slider).
   Reads "q ≤ &lt;value&gt; · N pathways shown" beneath it.
-- **Semantics**: an edge survives when `edge.qvalue <= threshold` — the slider
-  keeps mRNA · pathway connections at or *below* the chosen significance value
-  and hides the less-significant ones above it. A Pathway
-  with zero surviving edges is removed from the view entirely — not dimmed,
-  not just edge-less — same "hide, don't fade" treatment `filter` focus mode
-  already gives non-subgraph nodes.
+- **Semantics**: a Pathway node survives when `pathway.qvalue <= threshold` —
+  the slider keeps pathways at or *below* the chosen significance value and
+  hides the less-significant ones above it. A hidden Pathway is removed from
+  the view entirely — not dimmed — and its mRNA → Pathway edges fall away with
+  it (same `live[e.s] && live[e.t]` cleanup that hidden nodes use); this is the
+  same "hide, don't fade" treatment `filter` focus mode gives non-subgraph
+  nodes. (A Pathway that survives the q-filter but then loses every edge to
+  the class filter is still dropped, as before.)
 - **Orphaned Messenger RNA toggle** — a Messenger RNA that loses every Pathway
   edge to the q-value filter (regardless of whether it still carries a
   MicroRNA edge) is an "orphan." A `toolbar-pill` immediately below the
@@ -423,24 +431,29 @@ threshold filter**, styled as a new rail section following the existing
   this app, switches between showing and hiding orphans. Default is **show**
   (`hideOrphanMrna: false`) — the q-value filter should not silently prune
   more of the graph than the user explicitly asked for until they opt in.
-- Resets to the dataset's own maximum (i.e. unfiltered — every edge is at or
-  below the max) on dataset switch, same `null`-follows-default idiom used
+- Resets to the dataset's own maximum (i.e. unfiltered — every Pathway is at
+  or below the max) on dataset switch, same `null`-follows-default idiom used
   elsewhere in the state (see `railOpen`/`treeShown`).
 
-### 9. Five example datasets, and a second selector for Compare mode's B side
+### 9. Example datasets, and a second selector for Compare mode's B side
 
-The repo ships five real breast-cancer-subtype snapshots under `examples/`:
-`normal`, `basal-like`, `her2-enriched`, `luminal-a`, `luminal-b` — all five
-loaded up front in `mounted()`, not just the luminal pair. The top-bar dataset
-`seg` shows all five, labelled with the short display names above (`basal` for
-`basal-like`, `her2` for `her2-enriched`, the rest unchanged). These five seed
-`datasetMeta` (see §10) — the dataset **key** stays the full prefix, because
-it doubles as the `examples/<key>_{nodes,edges}.csv` filename; only the button
-copy (`datasetMeta[key].label`, via the `dsLabel()` helper) is shortened.
+The repo ships two real breast-cancer-subtype snapshots under `examples/`:
+`basal-like` and `luminal-a` — both loaded up front in `mounted()`. The
+top-bar dataset `seg` shows both, labelled with the short display names above
+(`basal` for `basal-like`, `luminal-a` unchanged). `DATASET_LABELS`
+(`js/graph-model.js`) is the source of that roster; it seeds both
+`datasetMeta` (see §10) and the empty `datasets` map. The dataset **key**
+stays the full prefix, because it doubles as the
+`examples/<key>_{nodes,edges}.csv` filename; only the button copy
+(`datasetMeta[key].label`, via the `dsLabel()` helper) is shortened. More
+snapshots can be added at runtime via "manage graphs" (§10); the default two
+are just a starting roster, not a fixed one.
 
-With exactly two datasets, Compare mode's second canvas could just be "the
-other one." With five, "the other one" is ambiguous, so Compare mode needs its
-own second selector: a `compareDataset` state field, exposed as a `vs` select
+Compare mode's second canvas can't simply be "the other one" — a user can load
+three or more graphs, and the default roster could itself grow — so Compare
+mode has its own second selector: a `compareDataset` state field (defaulting
+to `basal-like`, with `activeDataset` defaulting to `luminal-a`), exposed as a
+`vs` select
 (styled as `.nsm-select`, same control used for the NSM metric picker beside
 it) in the toolbar's Compare cluster (§3), shown only when `isCompare`. The
 invariant `activeDataset !== compareDataset` is maintained by swapping rather
@@ -452,7 +465,7 @@ still meaningfully looked up against the (unchanged) side-A dataset.
 
 ### 10. Manage graphs — add/remove which datasets are loaded
 
-The five built-ins are a starting set, not a fixed roster: a `manage graphs`
+The built-in datasets are a starting set, not a fixed roster: a `manage graphs`
 toolbar pill in the top bar (next to the dataset seg) opens a modal to add a
 user-supplied nodes/edges CSV pair as a new dataset, or remove any dataset —
 built-in or user-added — from the list. This is the one place in the app that
@@ -679,7 +692,8 @@ dir: 'down' | 'up' | 'both'
 labels: boolean
 treeWanted: boolean                   // trace-pane toggle; actual visibility also needs colW >= 640
 nsmMetric: string                     // 'none' + NSM_METRICS keys; compare-only, reset to 'none' by showLayers — §3/§4
-nsmState: 'specific' | 'differential' | 'common'
+nsmState: 'specific' | 'conserved' | 'rewired'  // 'shared' split by nsmJaccardCutoff — §4
+nsmJaccardCutoff: number             // 0..1, default 0.5 — conserved (>=) vs rewired (<) split — §3/§4
 reachOp: 'off' | 'intersection' | 'difference'  // reach set comparison; compare-only, reset to 'off' by showLayers — §13
 hidden: Record<nodeId, true>          // manually hidden nodes; persists across dataset/mode switches — §14
 hiddenMenuOpen: boolean               // toolbar "hidden (N)" popover — see §14

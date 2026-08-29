@@ -92,7 +92,7 @@
             <div class="q-legend__row">
               <span class="q-legend__bound">[[ qRangeRender.minLabel ]]</span>
               <input type="range" class="q-slider" :min="qRange.min" :max="qRange.max" :step="qStep"
-                     :value="effectiveQThreshold" title="show only mRNA · pathway connections with q ≤ this value"
+                     :value="effectiveQThreshold" title="show only pathways with q ≤ this value"
                      @input="setQThreshold($event.target.value)">
               <span class="q-legend__bound">[[ qRangeRender.maxLabel ]]</span>
             </div>
@@ -142,8 +142,15 @@
               <option v-for="m in nsmMetricOptions" :key="m.key" :value="m.key">[[ m.label ]]</option>
             </select>
             <div class="seg" v-if="nsmMetric !== 'none'">
-              <button v-for="s in ['specific','differential','common']" :key="s" class="seg-opt"
+              <button v-for="s in ['specific','conserved','rewired']" :key="s" class="seg-opt"
                       :class="{ 'seg-opt--selected': nsmState === s }" @click="setNsmState(s)">[[ s ]]</button>
+            </div>
+            <div class="nsm-jaccard" v-if="nsmMetric !== 'none' && nsmState !== 'specific'"
+                 title="Jaccard similarity that splits shared nodes into conserved (≥) and rewired (<)">
+              <span class="toolbar__label">split</span>
+              <input type="range" class="nsm-jaccard__slider" min="0" max="1" step="0.01"
+                     :value="nsmJaccardCutoff" @input="setNsmJaccardCutoff($event.target.value)">
+              <span class="nsm-jaccard__value">J ≥ [[ nsmJaccardCutoff.toFixed(2) ]]</span>
             </div>
             <span class="toolbar__label">Reach</span>
             <div class="seg">
