@@ -30,6 +30,16 @@ body {
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-divider);
 }
+/* Identity mark — flat cardboard-box illustration, sits left of the wordmark.
+   A brand mark, deliberately not a Lucide stroke icon like the toolbar toggles.
+   Palette is Organic-only (warm cardboard + terracotta family + sage). See
+   design_handoff_semantic_box/README.md §1 and §Assets. */
+.topbar__mark {
+  flex: none;
+  display: block;
+  width: 22px;
+  height: 22px;
+}
 .topbar__wordmark {
   font: 500 12px/1 var(--font-mono);
   letter-spacing: .08em;

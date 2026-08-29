@@ -158,6 +158,9 @@ The top bar carries **identity, dataset, and mode only**. Panel and
 canvas-overlay toggles live in the toolbar's `view` menu (§3, §12); compare's
 sub-controls live in the toolbar's Compare cluster (§3). Left to right:
 
+- Identity mark — 22×22 inline SVG (`.topbar__mark`), the flat cardboard-box
+  illustration (see §Assets). Sits first, before the wordmark, in the bar's
+  standard `gap:10px`.
 - Wordmark `semantic box` — JetBrains Mono 500 12px, `letter-spacing:.08em`, uppercase.
 - Dataset **segmented control** — one option per loaded dataset, `dsLabel(key)`
   copy (§9). Selecting one is `setDataset` (resets selection / tree / q-threshold).
@@ -761,7 +764,21 @@ ground instead.
 
 ## Assets
 
-None. No images, no icon files — every glyph is a styled `div`/`span` or an SVG
+One: the **identity mark**. `favicon.svg` at the repo root, referenced from
+`index.html` both as `<link rel="icon" type="image/svg+xml">` and, verbatim, as
+the inline `.topbar__mark` SVG in the top bar. It is a **flat illustration** — an
+isometric cardboard box (three warm cardboard fills `#e8bd8a` / `#d9a469` /
+`#a56d40`, packing tape `#f6e6c6` + `#e7d3ac`) with the class-encoding trio wired
+into a small graph on the front face: circle `#8a4a22`, box on sage `#7a8a5e`,
+diamond `#3f2c17`, edges `#3f2c17`, each node haloed `#f6ecda`. Drawn on a 24-unit
+grid with ~12% padding. It stays inside the Organic chrome palette (warm
+cardboard + the terracotta accent family + the sage accent-2 as a node-class
+swatch; no spectral hue). It is **deliberately not a Lucide stroke icon** — a
+brand mark is a different category from the toolbar toggles. Keep the two copies
+(`favicon.svg` and the inline block) in sync. Full design rationale and the
+version history live in `icon-concepts/` and the published design canvas.
+
+Otherwise: no images. Every other glyph is a styled `div`/`span` or an SVG
 primitive, and the few symbols used (`▾ ▸ · → ⇄ ⛓ ◦ +`) are text characters. The
 Organic system specifies **Lucide** icons at stroke-width 2.75 if your
 implementation wants real icons for the toolbar toggles.
