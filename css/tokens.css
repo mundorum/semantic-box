@@ -76,4 +76,8 @@
 
 /* Node class colour + shape (MicroRNA / Messenger RNA / Pathway) live in
    js/graph-model.js CLASSES — canvas fills need JS values for computed SVG
-   attributes, so that's the single source of truth; not duplicated here. */
+   attributes, so that's the single source of truth; not duplicated here.
+   Those three hues are caller-supplied for figure consistency (red / blue /
+   orange), a deliberate departure from the spectral construction above —
+   see the README's "two-palette rule" deviation note. Shape encoding keeps
+   the greyscale / colour-blind fallback intact. */

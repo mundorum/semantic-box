@@ -1,10 +1,15 @@
 // Class encoding: colour + shape are redundant so the graph survives
 // colour-blindness and greyscale printing. See design_handoff_semantic_box/README.md
 // "The two-palette rule". These are the canvas palette's single source of truth.
+// Colour + shape are redundant so the graph survives colour-blindness and
+// greyscale printing. Shapes are the design handoff's; the three hues are
+// caller-supplied (a ColorBrewer RdBu-style red/blue pair plus a saturated
+// orange) so figures exported for publication match the rest of the paper —
+// a deliberate departure from the README's original spectral class table.
 const CLASSES = [
-  { key: 'MicroRNA', label: 'MicroRNA', shape: 'diamond', color: '#3767cf' },
-  { key: 'Messenger RNA', label: 'Messenger RNA', shape: 'circle', color: '#c33a63' },
-  { key: 'Pathway', label: 'Pathway', shape: 'box', color: '#3f8c4a' },
+  { key: 'MicroRNA', label: 'MicroRNA', shape: 'diamond', color: '#EF3B2C' },
+  { key: 'Messenger RNA', label: 'Messenger RNA', shape: 'circle', color: '#6BAED6' },
+  { key: 'Pathway', label: 'Pathway', shape: 'box', color: '#FF8000' },
 ];
 const CLASS_MAP = {};
 CLASSES.forEach(c => { CLASS_MAP[c.key] = c; });
@@ -61,6 +66,18 @@ const NSM_METRICS = [
   { key: 'pathway_reach_descending', label: 'pathway reach (desc)' },
   { key: 'functional_impact_descending', label: 'functional impact (desc)' },
 ];
+
+// Short column headers for the compare-mode NSM label table (§15) — the full
+// label rides along in the th's title attribute.
+const NSM_ABBR = {
+  betweenness_centrality_descending: 'betw ↓',
+  closeness_centrality_descending: 'clos ↓',
+  degree_centrality_descending: 'degr ↓',
+  redundancy_coefficient_descending: 'redu ↓',
+  redundancy_coefficient_ascending: 'redu ↑',
+  pathway_reach_descending: 'reach ↓',
+  functional_impact_descending: 'impact ↓',
+};
 
 // NSM classification states the comparison can mark:
 //   'specific'  — this node is a high-p node for the metric in THIS dataset only.
@@ -128,7 +145,16 @@ function computeView(model, state) {
   const qThreshold = state.qThreshold ?? Infinity;
   const qOK = n => !(n.cls === 'Pathway' && n.qvalue != null && !Number.isNaN(n.qvalue) && n.qvalue > qThreshold);
 
-  const onNode = n => state.cls[n.cls] && n.layer <= state.active && state.vis[n.layer] && !hidden[n.id] && qOK(n);
+  // "Largest component only" view toggle: drop every MicroRNA / Messenger RNA
+  // whose is_in_largest_component flag is false, keeping the graph to its
+  // dominant connected component. Pathways carry no such flag and are never
+  // touched. Inert unless the dataset actually has the column populated
+  // (uploaded CSVs may omit it — then every miR/mRNA would parse to false).
+  const anyLargest = model.nodes.some(n => n.metrics && n.metrics.inLargestComponent);
+  const lcActive = state.largestComponentOnly && anyLargest;
+  const lcOK = n => !lcActive || n.cls === 'Pathway' || (n.metrics && n.metrics.inLargestComponent);
+
+  const onNode = n => state.cls[n.cls] && n.layer <= state.active && state.vis[n.layer] && !hidden[n.id] && qOK(n) && lcOK(n);
   let nodes = model.nodes.filter(onNode);
   let live = {};
   nodes.forEach(n => { live[n.id] = n; });

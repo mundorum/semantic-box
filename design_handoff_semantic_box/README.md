@@ -1,5 +1,9 @@
 # Handoff: Semantic Box — layered graph workspace
 
+> This is the **design/interaction spec**. For usage and code documentation of
+> the built app see [`../docs/`](../docs/) (user guide, developer guide, data
+> format reference).
+
 ## Overview
 
 Semantic Box is a knowledge-graph explorer for researchers working with layered
@@ -77,6 +81,16 @@ categorical separation:
 | `pathway` | green | `#3f8c4a` | circle | Organic sage at full chroma |
 | `test` | teal | `#0d8794` | circle | lab test |
 | `inferred` | warm grey | `#8a8177` | circle | deliberately desaturated |
+
+**Deviation — the tripartite (miR / mRNA / pathway) build ships caller-supplied
+hues.** The production canvas palette is now driven by `js/graph-model.js`
+`CLASSES` and is set for figure consistency with the rest of the paper, not by
+the walk-the-wheel construction above: `MicroRNA` `#EF3B2C` (diamond),
+`Messenger RNA` `#6BAED6` (circle), `Pathway` `#FF8000` (box) — a ColorBrewer
+RdBu-style red/blue pair plus a saturated orange. Shape encoding is unchanged,
+so greyscale / colour-blind legibility still holds. `NSM_IDENTITY` (violet
+`#8a4cc4` / teal `#0d8794`) is untouched — still distinct from all three.
+Editing `CLASSES` is the supported way to re-skin the canvas.
 
 Seven hues walked around the wheel at **one perceptual lightness (~L\* 56) and
 one chroma**, so no class outranks another by visual weight — only by hue.
@@ -246,6 +260,7 @@ they stay legible when the row wraps.
 - Panels: `rail`, `inspector`, `trace tree` — checkbox rows (`toggleRail` / `toggleInspector` / `toggleTree`). The tick reflects the *shown* state, so `trace tree` reads unchecked at `colW < 640` even when wanted.
 - Canvas overlays: `labels`, `info band`, `minimap` (`toggleLabels` / `toggleCornerTag` / `toggleMinimap`). Default all on. They exist because on a dense layout an overlay can sit on top of graph content the user needs.
 - Canvas filters: `dead-end nodes` (`toggleNoDownstream`) — a checkbox row whose tick means *shown* (checked when `!hideNoDownstream`), like the overlay rows. Unchecking it hides every **non-Pathway** node with no downstream (outgoing) edge — a MicroRNA or Messenger RNA that doesn't lead anywhere (e.g. an mRNA with no surviving Pathway link). It is **iterated to a fixpoint** in `computeView`, so removing a dead-end mRNA also drops any MicroRNA left pointing only at dead ends; what remains is exactly the nodes still on a miR → mRNA → Pathway chain. Pathways are deliberately exempt — they are the sink class by design, not dead ends, and removing them would cascade the whole graph away. Default shown.
+- Canvas filters: `minor-component nodes` (`toggleLargestComponentOnly`) — a checkbox row whose tick means *shown* (checked when `!largestComponentOnly`), same idiom as `dead-end nodes`. Unchecking it hides every **non-Pathway** node whose `is_in_largest_component` flag is 0 (`n.metrics.inLargestComponent` false), keeping the graph to its dominant connected component; the existing pathway-orphan / dangling-edge cleanup in `computeView` runs afterward. Pathways carry no component flag and are always kept. The row is hidden entirely (computed `hasComponentData`) for datasets whose nodes CSV lacks the column, and the filter is inert in `computeView` when no surviving node carries the flag. Default shown.
 - `reset pan & zoom` — action row, no checkbox (`resetView`).
 
 Squashed notice (when the trace pane is wanted but the window is too narrow), right after the `view` menu — `1px dashed #c0b6a5`, JetBrains Mono 400 9px, `--color-neutral-600`. Copy: `trace pane needs a wider window`.
@@ -262,7 +277,7 @@ See the two-palette section for ground, grid, hairline, node and edge colour.
   Placement measures the string (mono advance ≈ 0.6em → `len × 6.6` selected, `× 5.4` otherwise) and draws right of the node by default; **flips to the left only if the flipped position also fits**, and both branches clamp inside the box (6px inset) so labels never run off either edge.
   **NSM mode** (`by` metric ≠ `off` in the compare-mode Compare cluster — §3) normally replaces this rule with "only NSM-marked nodes (**or** the selected node) get a label," so a few hundred faded genes don't bury the handful that matter for the metric — while a node the user has actually clicked still shows its label on *both* canvases (selection is shared by id), even when it carries no NSM mark on one side. But that restriction must be scoped **per node class**, not applied globally: check it against `nsmMarkableClasses` — the set of classes that have *any* non-null `n.nsm[metricKey]` entry anywhere in either loaded dataset — and only suppress the normal label rule for a node whose own class is in that set. NSM analysis today is computed exclusively for MicroRNA (see `js/data-loader.js` — Messenger RNA and Pathway rows always parse to `[]`/`null`), so `nsmMarkableClasses` never contains those two classes; a node of either class keeps the ordinary "selected + hop ≤ 2" label rule regardless of whether Compare By is on. Getting this wrong — checking "does *any* mark exist anywhere" instead of "can *this node's class* ever be marked" — reads as: turn on any metric, and every Messenger RNA and Pathway label vanishes instantly, permanently, for as long as Compare By stays on, even though they're still visibly part of the highlighted subgraph (hop rings, edges, opacity all still show it). Both shipped datasets (`examples/basal-like_nodes.csv`, `examples/luminal-a_nodes.csv`) carry the full NSM column set, so Compare By against either exercises this path directly. The "no NSM data at all" fallback (`nsmMarkableClasses` empty → every class keeps the ordinary label rule) is not exercised by shipped data any more; the case to test it against is an uploaded nodes CSV with only `id,label,type`.
 
-  **NSM classification states.** Each `*_descending` / `*_ascending` cell parses (`parseNsmCell`) to one of: nothing (`[]` — not a high-p node for this metric); `specific` (`[['specific']]` — high-p in *this* dataset only); or `shared` (`[['shared', otherDatasetDisplayName, jaccard]]` — also high-p in one other dataset, with the Jaccard similarity of the two neighbourhoods). The comparison never marks `shared` directly — it splits it, by the user's `split` Jaccard cutoff (§3), into **`conserved`** (`jaccard ≥ cutoff` — the wiring around the node is similar in both datasets) and **`rewired`** (`jaccard < cutoff` — same node, meaningfully different wiring). There is no canonical cutoff, hence the slider; it defaults to `0.5`. `computeNsmMarks(metricKey, state, cutoff, …)` folds this through `nsmStateMatches`; `specific` still gets an own-side-only strong mark with no echo, `conserved` / `rewired` get the strong mark plus the faint same-colour echo on the other canvas (`info.other` is a dataset *display name*, so it's `slugify`'d before matching the dataset *key*).
+  **NSM classification states.** Each `*_descending` / `*_ascending` cell parses (`parseNsmCell`) to one of: nothing (`[]` — not a high-p node for this metric); `specific` (`[['specific']]` — high-p in *this* dataset only); or `shared` (`[['shared', otherDatasetDisplayName, jaccard]]` — also high-p in one other dataset, with the Jaccard similarity of the two neighbourhoods). The comparison never marks `shared` directly — it splits it, by the user's `split` Jaccard cutoff (§3), into **`conserved`** (`jaccard ≥ cutoff` — the wiring around the node is similar in both datasets) and **`rewired`** (`jaccard < cutoff` — same node, meaningfully different wiring). There is no canonical cutoff, hence the slider; it defaults to `0.5`. `computeNsmMarks(metricKey, state, cutoff, …)` folds this through `nsmStateMatches`; `specific` still gets an own-side-only strong mark with no echo, `conserved` / `rewired` get the strong mark plus the faint same-colour echo on the other canvas (`info.other` is a dataset *display name*, so it's `slugify`'d before matching the dataset *key*). The same classification is also tabulated per miRNA per metric in the compare-only `NSM` inspector tab — see §15.
 - Clicking a node selects it; clicking bare SVG background clears the selection.
 - **Corner tag** — top-left pill, `1px solid divider`, `background:#f9f4ed`, JetBrains Mono 400 10px, `--color-neutral-700`, ellipsised. Reads `L3 · clustered · 118 n · 190 e · focus highlight · 2 hop`; in compare mode prefixed `A · ` / `B · `. Hideable via the `view` menu's `info band` row — it can sit on top of nodes near the top-left corner on a dense layout.
 - **Minimap** — bottom-right, 104×68, `radius 6px`, `1px solid #c0b6a5`, `background:#f9f4ed`, containing a viewport rect, `1px solid #c67139`, `radius 3px`. Wired to the real pan/zoom transform: rect `left/top/width/height` are `-panX/k`, `-panY/k`, `100/k`, `100/k` percent of the canvas box. `overflow:hidden` on the minimap crops the rect when panned/zoomed past the edge rather than letting it escape the box. Hideable via the `view` menu's `minimap` row, independently of the corner tag — same rationale.
@@ -306,9 +321,32 @@ subgraph" case in the app already does.
 
 280px fixed, left divider, `background:#f9f4ed`. Hidden when `colW < 640`.
 
-Header: `trace · <rootId>` (JetBrains Mono 500 10px, `.06em`, uppercase, ellipsis)
-plus `expand` / `collapse` pills (`padding:4px 8px`, 9px). Expand sets base depth
-to 4 and clears manual toggles; collapse sets base depth to 1.
+Header: `trace · <root label>` (JetBrains Mono 500 10px, `.06em`, uppercase,
+ellipsis; the node's `label`, never its raw `id` — §7 — via the `traceHeader`
+computed) plus `expand` / `collapse` pills (`padding:4px 8px`, 9px). Expand sets
+base depth to 4 and clears manual toggles; collapse sets base depth to 1. **In
+compare mode the header is prefixed `A · ` / `B · `** — see "side-aware in
+compare mode" below.
+
+**The tree always tracks the current selection.** There is no manual "pin the
+root" mode. `select(id)` sets `treeRoot = id` whenever `id` is non-null;
+clearing the selection (bare-canvas click) leaves `treeRoot` on the last node
+so the pane keeps showing something rather than blanking, and
+`effectiveTreeRoot` falls back to it (then to `null`) when that node is
+filtered out of the current trace-side view. `openInTree()` ("root the trace
+tree here" in the Node tab) now just reveals the pane and resets the base
+depth at the selected node. *(A previous "pinned root" heuristic — root stays
+put while you select elsewhere unless it was "tracking" the selection — was
+removed: after a null selection it wedged `treeRoot !== selected` permanently
+and the tree silently stopped following new clicks.)*
+
+**Side-aware in compare mode.** The trace tree reads from `traceView` — the
+canvas side of the **last node click** (`traceSide`, `'A'` | `'B'`, set by
+`nodeClick(id, side)`; inspector rows force `'A'` via `selectA`). Click a node
+on the right (B) canvas and the tree re-roots there against dataset B's graph;
+click left and it's back to A. `traceSide` resets to `'A'` on every mode /
+dataset switch. In Layers mode it is always `'A'`. `effectiveTreeRoot`,
+`treeData` and `treeRowsRender` all read `traceView`, not the side-A `view`.
 
 Cap notice (when the row cap is hit) — `1px dashed #b2622d`, `radius 8px`,
 `background:#fff2eb`, ink `--color-accent-800`, JetBrains Mono 400 9px/1.4. Copy:
@@ -332,7 +370,9 @@ default while `depth < baseDepth` (default 2); explicit user toggles override.
 Tab bar: `padding:11px 12px; gap:6px`, bottom divider. Tabs `Node` / `Layer` /
 `Alignment` — `padding:7px 11px`, `radius 6px`, JetBrains Mono 500 10px; active
 gets overlay `1px solid #c0b6a5` + `background:#ebddc5`. **In compare mode the
-order becomes `Alignment` / `Node` / `Layer` and Alignment is auto-selected.**
+order becomes `Alignment` / `Node` / `Layer` / `NSM` (a fourth, compare-only
+tab — §15) and Alignment is auto-selected.** `showLayers()` moves `panel` off
+`NSM` as well as `Alignment`.
 
 Body: `padding:14px`, `gap:12px`, scrolls.
 
@@ -369,14 +409,15 @@ clickable → select. Unmatched B shows `—` and Δ shows `A only`.
 
 ## Interactions & behaviour
 
-- **Select node** — click canvas node, tree row, neighbour row, or alignment row. Recomputes BFS distances. If the tree root was unset or was tracking the previous selection, the root follows; otherwise it stays pinned. Switches the inspector to `Node` unless the user is on `Alignment`.
-- **Clear selection** — click bare canvas. Tree root is retained.
+- **Select node** — click canvas node, tree row, neighbour row, or alignment row. Recomputes BFS distances. The trace-tree root always follows the new selection (§5 — no pinning). In compare mode a canvas-node click also points the tree at that side (`traceSide`). Switches the inspector to `Node` unless the user is on `Alignment` or `NSM`.
+- **Clear selection** — click bare canvas. `treeRoot` is retained (last node) so the pane doesn't blank; the next selection re-roots it.
 - **Hide node** — `Del` / `Backspace` while a node is selected (the app's only keyboard shortcut; ignored while an `input`/`select`/`textarea` has focus), or the Node tab's `hide node` pill. See §14.
 - **Focus modes** — `none`: no decay, everything at full opacity. `highlight`: subgraph at decay alpha, everything else at 0.1. `filter`: non-subgraph nodes and edges are removed from the DOM entirely.
 - **Hops** — 1/2/3, sets BFS depth.
 - **Direction** — `down` follows outgoing edges only; `up` follows incoming edges only; `both` follows both. Affects BFS, which of the inspector's outgoing/incoming groups render, and nothing else (the tree is always outgoing).
 - **Mode** — `layers` / `compare` segmented control in the top bar. `showLayers` also clears `nsmMetric` and moves the inspector off `Alignment`; `showCompare` selects the `Alignment` tab. Both reset `railOpen` / `inspectorOpen` to their mode defaults.
-- **View menu** — a toolbar popover (§12) toggling the three side panels (rail, inspector, trace tree), the three canvas overlays (labels, info band, minimap), and the `dead-end nodes` canvas filter (hide non-Pathway nodes with no downstream edge), plus a reset-pan/zoom action. Dismiss: click the scrim, or resize the window.
+- **View menu** — a toolbar popover (§12) toggling the three side panels (rail, inspector, trace tree), the three canvas overlays (labels, info band, minimap), and the `dead-end nodes` / `minor-component nodes` canvas filters, plus a reset-pan/zoom action. Dismiss: click the scrim, or resize the window.
+- **Export menu** — an `export ▾` `toolbar-pill` + popover (the §12 shell again) in the right-aligned toolbar cluster, before `view ▾`. Two rows: `SVG (vector)` and `PNG (3× raster)`. Both serialise the live canvas `<svg>`(s) straight from the DOM — node/edge styling is already inline SVG presentation attributes — add a white background, an explicit size/viewBox, and (compare mode) combine the two canvases into one image split by a 1px divider. The on-screen dot grid is left out deliberately. PNG additionally inlines the JetBrains Mono / Figtree woff2 as base64 `@font-face` before rasterising (best-effort; falls back to `monospace`). SVG references the families by name — font-accurate wherever they're installed. Filename `semantic-box_<A>[_vs_<B>]_<yyyymmdd-hhmm>.{svg,png}`. Implementation: `js/svg-export.js` (`serializeCanvasSVG` / `rasterize` / `triggerDownload`), driven by `exportSVG()` / `exportPNG()` in `js/app.js`.
 - **Class toggle** — removes that class from the view; layer counts, node counts and edges recompute.
 - **Layer visibility / opacity / active** — active layer sets the ceiling: nodes and edges with `layer > active` are excluded. Per-layer opacity multiplies into node and edge alpha.
 - **Tree expand/collapse** — per-row toggles stored by path key; expand/collapse-all resets toggles and moves the base depth.
@@ -584,10 +625,16 @@ across the top bar and the toolbar with no grouping — the "too many peer
 controls" problem this pass set out to fix. Gathering them behind one `view ▾`
 pill trades a click for a much quieter toolbar; they're all infrequent, so
 that's the right trade. Later low-frequency canvas controls land here too (the
-`dead-end nodes` filter — §3). Which
+`dead-end nodes` and `minor-component nodes` filters — §3). Which
 consolidation to use here was an explicit product decision — an always-visible
 inline cluster was the alternative; the popover won on "reduces the crowded
 perception."
+
+The popover shell (`.view-menu__pop` / `__scrim` / `__row` / `__group` /
+`__row--action`) is now reused by **four** controls: the `view` menu itself,
+the `hidden (N)` list (§14), and the `export ▾` menu (the "Export" subsection
+under §Interactions). All dismiss on scrim-click or `window` resize
+(`_onResize` clears `viewMenuOpen` / `hiddenMenuOpen` / `exportMenuOpen`).
 
 It still reads as Organic chrome: it borrows the modal's surface tokens (cream
 `--color-bg` ground, `--radius-sm`, `--shadow-lg`) and the layer card's
@@ -674,8 +721,8 @@ edits the search box).
 - **The list**: a `hidden (N) ▾` `toolbar-pill` in the right-aligned cluster
   (before `view ▾`), rendered only when `hiddenCount > 0`, opening a popover
   that **reuses the `view` menu's shell verbatim** (`.view-menu__pop` /
-  `__scrim` / `__row` / `__group` / `__row--action`) — this is the third
-  instance of that popover idiom (§12), not a new pattern. Each row is
+  `__scrim` / `__row` / `__group` / `__row--action`) — one of four uses of
+  that popover idiom (§12), not a new pattern. Each row is
   `label` + a right-aligned `×`, click anywhere on it to restore that node;
   a `show all` action row clears the map. `_onResize` also clears
   `hiddenMenuOpen`.
@@ -685,18 +732,50 @@ edits the search box).
 - Node identity in the list is `label`, never raw `id` (§7) — resolved against
   whichever loaded dataset has the node, id as the last-resort fallback.
 
+### 15. NSM label table — a fourth inspector tab (compare only)
+
+The NSM classification the canvas already draws as rings (§4) is also
+surfaced as a table, for reading off *which* miRNAs carry a `specific` /
+`conserved` / `rewired` label and on *how many* metrics. It's a fourth
+inspector tab, `NSM`, rendered only in compare mode (`panelTabs` appends it
+when `isCompare`), same tab idiom as Node / Layer / Alignment.
+
+- **Self-contained** — it does not need a canvas `by` metric picked. Its own
+  `specific / conserved / rewired` `seg` writes the shared `nsmState` field,
+  and for `conserved` / `rewired` a `split` Jaccard slider writes
+  `nsmJaccardCutoff` (both reuse the toolbar's control classes: `.seg`,
+  `.nsm-jaccard`).
+- **Two stacked sub-tables**, one per dataset — heading `<dsLabel> (A)` then
+  `<dsLabel> (B)` (`.nsm-table__caption`, the `.section-label` idiom).
+- **Rows** = that dataset's `MicroRNA` nodes with ≥1 matching metric, sorted
+  by the trailing count column descending (ties: label ascending). Row click
+  selects the node on side A (`selectA`).
+- **Columns** = the 7 `NSM_METRICS`, abbreviated (`NSM_ABBR`: `betw ↓` …
+  `impact ↓`) with the full label in the `th`'s `title`, then a count
+  column `n`. Cell: `✓` for `specific`; the Jaccard value (`toFixed(3)`) for
+  `conserved` / `rewired`; blank when the metric doesn't match. Match test is
+  the existing `nsmStateMatches(info, nsmState, nsmJaccardCutoff)`.
+- The table is wider than the 220–300px inspector, so it lives in a
+  `.nsm-table__scroll` (`overflow-x:auto`) with a sticky first column — the
+  README's sanctioned treatment for wide content. Built by the `nsmLabelTable`
+  computed (`null` outside compare mode; empty per-side → a
+  `no <state> miRNA in this dataset` line).
+
 ## State management
 
 ```
 mode: 'layers' | 'compare'            // top-bar segmented control
 viewMenuOpen: boolean                 // toolbar "view" popover — see §3 / §12
-panel: 'node' | 'layer' | 'align'     // inspector tab
+exportMenuOpen: boolean               // toolbar "export ▾" popover — figure download, see Export subsection
+panel: 'node' | 'layer' | 'align' | 'nsm'  // inspector tab ('nsm' compare-only — §15)
 active: 0..3                          // active (ceiling) layer index
 vis: boolean[4]                       // per-layer visibility
 op: number[4]                         // per-layer opacity 0..100
 cls: Record<classKey, boolean>        // class filter
 selected: nodeId | null
-treeRoot: nodeId | null
+treeRoot: nodeId | null                // last selected node; trace tree always tracks it, no pin — §5
+traceSide: 'A' | 'B'                   // compare-mode canvas the trace tree follows; set by nodeClick, reset on mode/dataset switch — §5
+largestComponentOnly: boolean         // view-menu "minor-component nodes" filter; default false (shown) — §3
 focus: 'none' | 'highlight' | 'filter'
 hop: 1 | 2 | 3
 dir: 'down' | 'up' | 'both'

@@ -197,6 +197,24 @@
           </div>
 
           <div class="view-menu">
+            <button class="toolbar-pill" @click="exportMenuOpen = !exportMenuOpen"
+                    title="download the canvas as a figure for a paper">
+              <span class="pill__active-overlay" v-if="exportMenuOpen"></span>
+              <span class="pill__label">export ▾</span>
+            </button>
+            <div class="view-menu__scrim" v-if="exportMenuOpen" @click="exportMenuOpen = false"></div>
+            <div class="view-menu__pop" v-if="exportMenuOpen">
+              <div class="view-menu__group">Download figure</div>
+              <button class="view-menu__row" @click="exportSVG">
+                <span class="hidden-menu__label">SVG (vector)</span>
+              </button>
+              <button class="view-menu__row" @click="exportPNG">
+                <span class="hidden-menu__label">PNG (3× raster)</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="view-menu">
             <button class="toolbar-pill" @click="viewMenuOpen = !viewMenuOpen"
                     title="show/hide panels and canvas overlays">
               <span class="pill__active-overlay" v-if="viewMenuOpen"></span>
@@ -228,6 +246,10 @@
               <button class="view-menu__row" @click="toggleNoDownstream"
                       title="hide miRNA / mRNA nodes with no downstream (outgoing) edge — dead ends that don't lead to a pathway; pathways themselves are kept">
                 <span class="view-menu__chk" :class="{ 'view-menu__chk--on': !hideNoDownstream }"></span>dead-end nodes
+              </button>
+              <button class="view-menu__row" v-if="hasComponentData" @click="toggleLargestComponentOnly"
+                      title="hide miRNA / mRNA nodes outside the graph's largest connected component (is_in_largest_component = 0); pathways are always kept">
+                <span class="view-menu__chk" :class="{ 'view-menu__chk--on': !largestComponentOnly }"></span>minor-component nodes
               </button>
               <button class="view-menu__row view-menu__row--action" @click="resetView">reset pan &amp; zoom</button>
             </div>
@@ -319,15 +341,15 @@
                     <rect v-if="n.shape === 'box'"
                           :x="n.cx - n.r" :y="n.cy - n.r" :width="n.r * 2" :height="n.r * 2" rx="2"
                           :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
-                          style="cursor:pointer" @click="nodeClick(n.id)" />
+                          style="cursor:pointer" @click="nodeClick(n.id, 'B')" />
                     <polygon v-else-if="n.shape === 'diamond'"
                           :points="diamondPoints(n)"
                           :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
-                          style="cursor:pointer" @click="nodeClick(n.id)" />
+                          style="cursor:pointer" @click="nodeClick(n.id, 'B')" />
                     <circle v-else
                           :cx="n.cx" :cy="n.cy" :r="n.r"
                           :fill="n.fill" :fill-opacity="n.fillOpacity" :stroke="n.stroke" :stroke-width="n.strokeWidth" :stroke-opacity="n.strokeOpacity"
-                          style="cursor:pointer" @click="nodeClick(n.id)" />
+                          style="cursor:pointer" @click="nodeClick(n.id, 'B')" />
                     <circle v-if="n.hopRing" :cx="n.cx" :cy="n.cy" :r="n.ringR" fill="none"
                           :stroke="n.ringColor" stroke-width="0.7" :stroke-opacity="n.ringOpacity" style="pointer-events:none" />
                     <circle v-if="n.nsmRing" :cx="n.cx" :cy="n.cy" :r="n.ringNsmR" fill="none"
@@ -346,7 +368,7 @@
 
           <div class="tree-pane" v-if="treeShown">
             <div class="tree-pane__header">
-              <span class="tree-pane__title">trace · [[ effectiveTreeRoot || 'click a node' ]]</span>
+              <span class="tree-pane__title">trace · [[ traceHeader ]]</span>
               <button class="tree-pane__btn" @click="expandAllRows">expand</button>
               <button class="tree-pane__btn" @click="collapseAllRows">collapse</button>
             </div>
@@ -415,7 +437,7 @@
             <div class="neighbour-group" v-for="g in nodeGroups" :key="g.label">
               <div class="neighbour-group__header"><span>[[ g.label ]]</span><span class="rail-header__spacer"></span><span>[[ g.count ]]</span></div>
               <div class="neighbour-rows">
-                <div class="neighbour-row" v-for="r in g.rows" :key="r.id" @click="select(r.id)">
+                <div class="neighbour-row" v-for="r in g.rows" :key="r.id" @click="selectA(r.id)">
                   <span class="neighbour-row__dot" :style="{ background: r.color }"></span>
                   <span class="neighbour-row__id">[[ r.label ]]</span>
                   <span class="neighbour-row__bar"><span class="neighbour-row__bar-fill" :style="{ width: r.pct }"></span></span>
@@ -450,12 +472,60 @@
             <table class="align-table">
               <thead><tr><th class="marker-col"></th><th>A</th><th>B</th><th class="num">reach A/B</th><th class="num">Δ</th></tr></thead>
               <tbody>
-                <tr v-for="row in alignmentRows" :key="row.id" @click="select(row.id)">
+                <tr v-for="row in alignmentRows" :key="row.id" @click="selectA(row.id)">
                   <td class="marker-col"><span class="align-marker" v-if="row.selected"></span></td>
                   <td>[[ row.a ]]</td><td>[[ row.b ]]</td><td class="num">[[ row.deg ]]</td><td class="num">[[ row.delta ]]</td>
                 </tr>
               </tbody>
             </table>
+          </div>
+
+          <div class="nsm-tab" v-if="panel === 'nsm' && nsmLabelTable">
+            <div class="align-tab__header">
+              <span>NSM labels</span><span class="rail-header__spacer"></span>
+              <span>[[ nsmState ]] miRNA × metric</span>
+            </div>
+
+            <div class="seg nsm-tab__state">
+              <button v-for="s in ['specific','conserved','rewired']" :key="s" class="seg-opt"
+                      :class="{ 'seg-opt--selected': nsmState === s }" @click="setNsmState(s)">[[ s ]]</button>
+            </div>
+            <div class="nsm-jaccard nsm-tab__split" v-if="nsmState !== 'specific'"
+                 title="Jaccard similarity that splits shared nodes into conserved (≥) and rewired (<)">
+              <span class="toolbar__label">split</span>
+              <input type="range" class="nsm-jaccard__slider" min="0" max="1" step="0.01"
+                     :value="nsmJaccardCutoff" @input="setNsmJaccardCutoff($event.target.value)">
+              <span class="nsm-jaccard__value">J ≥ [[ nsmJaccardCutoff.toFixed(2) ]]</span>
+            </div>
+
+            <template v-for="side in [nsmLabelTable.a, nsmLabelTable.b]" :key="side.label">
+              <div class="section-label nsm-table__caption">[[ side.label ]]</div>
+              <div class="nsm-table__scroll" v-if="side.rows.length">
+                <table class="nsm-table">
+                  <thead>
+                    <tr>
+                      <th class="nsm-table__mir">miRNA</th>
+                      <th v-for="c in nsmLabelTable.cols" :key="c.key" class="num" :title="c.label">[[ c.abbr ]]</th>
+                      <th class="num" title="number of metrics with this label">n</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="r in side.rows" :key="r.id" @click="selectA(r.id)">
+                      <td class="nsm-table__mir">[[ r.label ]]</td>
+                      <td v-for="cell in r.cells" :key="cell.key" class="num"
+                          :class="{ 'nsm-table__hit': cell.hit }">[[ cell.text ]]</td>
+                      <td class="num nsm-table__count">[[ r.count ]]</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="nsm-table__empty" v-else>no [[ nsmState ]] miRNA in this dataset</p>
+            </template>
+          </div>
+
+          <div class="nsm-tab" v-if="panel === 'nsm' && !nsmLabelTable">
+            <div class="align-tab__header"><span>NSM labels</span></div>
+            <p class="nsm-table__empty">available in compare mode only</p>
           </div>
 
         </div>
@@ -527,6 +597,7 @@
 <script src="js/layout.js"></script>
 <script src="js/graph-model.js"></script>
 <script src="js/data-loader.js"></script>
+<script src="js/svg-export.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

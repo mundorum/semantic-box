@@ -87,6 +87,12 @@ createApp({
       // affected. Default false = shown.
       hideNoDownstream: false,
 
+      // "Largest component only" view toggle (view menu). When true, MicroRNA /
+      // Messenger RNA nodes outside the graph's largest connected component
+      // (is_in_largest_component = 0) are hidden. Pathways carry no component
+      // flag and are always kept. Default false = shown. See computeView.
+      largestComponentOnly: false,
+
       // Canvas pan/zoom. Shared by both canvases in compare mode — matches
       // the "synced pan · zoom" claim already made by the compare-mode badge.
       viewTransform: { x: 0, y: 0, k: 1 },
@@ -98,11 +104,16 @@ createApp({
       hoverA: null,
       hoverB: null,
 
-      // Trace tree — a DFS path tree pinned to the selected node unless the
-      // user has pinned it elsewhere (see select() for the pinning rule).
+      // Trace tree — a DFS path tree that always tracks the current selection
+      // (see select()). treeRoot retains the last selected node so the pane
+      // doesn't blank when the selection is cleared by a bare-canvas click.
       treeRoot: null,
       open: {},          // per-path-key expand/collapse overrides
       baseDepth: 2,
+      // Which compare-mode canvas the trace tree follows — set by whichever
+      // canvas the last node click landed on (see nodeClick). Always 'A' in
+      // layers mode. Reset on mode / dataset switch.
+      traceSide: 'A',   // 'A' | 'B'
 
       // Node Specificity by Metric (NSM) cross-graph comparison — 'none' turns
       // it off entirely. Works in either mode (both datasets are always
@@ -130,6 +141,10 @@ createApp({
       // "show all".
       hidden: {},
       hiddenMenuOpen: false,
+
+      // Toolbar "export ▾" popover — download the canvas as a figure (SVG or
+      // high-resolution PNG). Reuses the view-menu popover shell. See §12.
+      exportMenuOpen: false,
     };
   },
 
@@ -232,7 +247,15 @@ createApp({
         active: this.active, vis: this.vis, cls: this.cls,
         qThreshold: this.effectiveQThreshold, hideOrphanMrna: this.hideOrphanMrna,
         hideNoDownstream: this.hideNoDownstream, hidden: this.hidden,
+        largestComponentOnly: this.largestComponentOnly,
       });
+    },
+
+    // The graph the trace tree reads from. In compare mode it follows whichever
+    // canvas the last node click landed on (traceSide); everywhere else it is
+    // side A. Repoints effectiveTreeRoot / treeData / treeRowsRender.
+    traceView() {
+      return this.traceSide === 'B' && this.viewB ? this.viewB : this.view;
     },
 
     dirOptions() {
@@ -292,18 +315,32 @@ createApp({
       }));
     },
 
-    // Falls back to the current selection when the pinned root has scrolled
-    // out of view (filtered out) or nothing has been pinned yet.
+    // Falls back to the current selection when the retained root has been
+    // filtered out of the trace-side view.
     effectiveTreeRoot() {
-      return this.treeRoot && this.view.live[this.treeRoot] ? this.treeRoot : this.selected;
+      return this.treeRoot && this.traceView.live[this.treeRoot] ? this.treeRoot : this.selected;
+    },
+
+    // Trace-pane header text — the root node's label (never its raw id, §7),
+    // prefixed with the followed canvas side in compare mode.
+    traceHeader() {
+      const root = this.effectiveTreeRoot, v = this.traceView;
+      const name = root && v.live[root] ? (v.live[root].label || root) : (root || 'click a node');
+      return this.isCompare ? this.traceSide + ' · ' + name : name;
+    },
+
+    // Whether the active dataset actually carries is_in_largest_component data
+    // — the "minor-component nodes" view-menu filter is hidden without it.
+    hasComponentData() {
+      return this.model.nodes.some(n => n.metrics && n.metrics.inLargestComponent);
     },
 
     treeData() {
-      return computeTree(this.view, this.effectiveTreeRoot, { open: this.open, baseDepth: this.baseDepth });
+      return computeTree(this.traceView, this.effectiveTreeRoot, { open: this.open, baseDepth: this.baseDepth });
     },
 
     treeRowsRender() {
-      const v = this.view;
+      const v = this.traceView;
       return this.treeData.rows.map(row => {
         const n = v.live[row.id];
         const c = CLASS_MAP[n ? n.cls : 'Messenger RNA'];
@@ -330,6 +367,7 @@ createApp({
         active: this.active, vis: this.vis, cls: this.cls,
         qThreshold: this.effectiveQThreshold, hideOrphanMrna: this.hideOrphanMrna,
         hideNoDownstream: this.hideNoDownstream, hidden: this.hidden,
+        largestComponentOnly: this.largestComponentOnly,
       });
     },
 
@@ -370,9 +408,46 @@ createApp({
       return set;
     },
 
+    // Compare-mode NSM label table (§15) — one stacked sub-table per dataset,
+    // MicroRNA rows × the 7 NSM metrics, marking the CURRENT nsmState
+    // (specific / conserved / rewired, split by nsmJaccardCutoff). `specific`
+    // cells show ✓; `conserved` / `rewired` cells show the Jaccard value. The
+    // trailing count column drives the descending row sort. Self-contained:
+    // does not need a canvas `by` metric to be picked.
+    nsmLabelTable() {
+      if (!this.isCompare || !this.modelB) return null;
+      const cols = NSM_METRICS.map(m => ({ key: m.key, label: m.label, abbr: NSM_ABBR[m.key] || m.label }));
+      const state = this.nsmState, cutoff = this.nsmJaccardCutoff;
+      const build = nodes => {
+        const rows = [];
+        nodes.forEach(n => {
+          if (n.cls !== 'MicroRNA') return;
+          let count = 0;
+          const cells = cols.map(c => {
+            const info = n.nsm[c.key];
+            if (!nsmStateMatches(info, state, cutoff)) return { key: c.key, hit: false, text: '' };
+            count++;
+            const text = state === 'specific'
+              ? '✓'
+              : (info.jaccard == null ? '—' : info.jaccard.toFixed(3));
+            return { key: c.key, hit: true, text };
+          });
+          if (count) rows.push({ id: n.id, label: n.label || n.id, cells, count });
+        });
+        rows.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+        return rows;
+      };
+      return {
+        cols,
+        state,
+        a: { label: this.dsLabel(this.activeDataset), rows: build(this.model.nodes) },
+        b: { label: this.dsLabel(this.compareDataset), rows: build(this.modelB.nodes) },
+      };
+    },
+
     panelTabs() {
       const order = this.isCompare
-        ? [['align', 'Alignment'], ['node', 'Node'], ['layer', 'Layer']]
+        ? [['align', 'Alignment'], ['node', 'Node'], ['layer', 'Layer'], ['nsm', 'NSM']]
         : [['node', 'Node'], ['layer', 'Layer'], ['align', 'Alignment']];
       return order.map(([key, label]) => ({ key, label }));
     },
@@ -536,8 +611,8 @@ createApp({
     // in the compare-only toolbar cluster — so leaving compare mode turns it
     // off, or nodes would keep the NSM label/ring treatment with no visible
     // control to clear it.
-    showLayers() { this.mode = 'layers'; if (this.panel === 'align') this.panel = 'node'; this.railOpen = null; this.inspectorOpen = null; this.nsmMetric = 'none'; this.reachOp = 'off'; },
-    showCompare() { this.mode = 'compare'; this.panel = 'align'; this.railOpen = null; this.inspectorOpen = null; },
+    showLayers() { this.mode = 'layers'; if (this.panel === 'align' || this.panel === 'nsm') this.panel = 'node'; this.railOpen = null; this.inspectorOpen = null; this.nsmMetric = 'none'; this.reachOp = 'off'; this.traceSide = 'A'; },
+    showCompare() { this.mode = 'compare'; this.panel = 'align'; this.railOpen = null; this.inspectorOpen = null; this.traceSide = 'A'; },
 
     toggleRail() { this.railOpen = !this.railShown; },
     toggleInspector() { this.inspectorOpen = !this.inspectorShown; },
@@ -683,6 +758,7 @@ createApp({
       this.open = {};
       this.baseDepth = 2;
       this.qThreshold = null;
+      this.traceSide = 'A';
     },
 
     // Picking the dataset that's already B swaps A/B instead of colliding —
@@ -821,20 +897,30 @@ createApp({
       }
     },
 
-    // If the tree root was unset or was tracking the previous selection, it
-    // follows the new selection; otherwise a manually-pinned root stays put.
-    // Clearing the selection (id === null) never touches the root.
+    // The trace tree always tracks the current selection. Clearing the
+    // selection (id === null) leaves treeRoot on the last node so the pane
+    // keeps showing something rather than blanking; effectiveTreeRoot drops
+    // back to it. (There is no manual "pin the root" mode — that was the
+    // source of the tree-stops-syncing bug.)
     select(id) {
-      const root = id && (this.treeRoot === null || this.treeRoot === this.selected) ? id : this.treeRoot;
       this.selected = id;
       if (id) {
-        this.treeRoot = root;
-        if (this.panel !== 'align') this.panel = 'node';
+        this.treeRoot = id;
+        if (this.panel !== 'align' && this.panel !== 'nsm') this.panel = 'node';
       }
     },
     // A node click that lands right after a pan drag is a drag artifact, not
-    // an intentional selection — see onPointerDown/onPointerMove.
-    nodeClick(id) { if (!this._dragMoved) this.select(id); },
+    // an intentional selection — see onPointerDown/onPointerMove. `side` is
+    // the canvas the click landed on ('A' / 'B') — in compare mode the trace
+    // tree follows that side.
+    nodeClick(id, side) {
+      if (this._dragMoved) return;
+      this.traceSide = side || 'A';
+      this.select(id);
+    },
+    // Inspector rows (neighbour groups, alignment table) all show side-A data,
+    // so selecting from them points the trace tree at side A too.
+    selectA(id) { this.traceSide = 'A'; this.select(id); },
     svgClick(e) {
       if (this._dragMoved) return;
       if (e.target.tagName === 'svg') this.select(null);
@@ -959,6 +1045,41 @@ createApp({
     toggleCornerTag() { this.cornerTagShown = !this.cornerTagShown; },
     toggleMinimap() { this.minimapShown = !this.minimapShown; },
     toggleNoDownstream() { this.hideNoDownstream = !this.hideNoDownstream; },
+    toggleLargestComponentOnly() { this.largestComponentOnly = !this.largestComponentOnly; },
+
+    // --- Figure export: download the canvas as SVG (vector) or high-res PNG ---
+    // Serialises the live canvas <svg>(s) straight from the DOM (node/edge
+    // styling is already inline SVG attributes). In compare mode both canvases
+    // are combined into one image, split by a divider. See js/svg-export.js.
+    exportFilename(ext) {
+      const d = new Date();
+      const p = n => String(n).padStart(2, '0');
+      const stamp = '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes());
+      const base = 'semantic-box_' + this.activeDataset + (this.isCompare ? '_vs_' + this.compareDataset : '') + '_' + stamp;
+      return base + '.' + ext;
+    },
+    exportSVGEls() {
+      const wrap = this._canvasWrap;
+      return wrap ? Array.from(wrap.querySelectorAll('.canvas svg')) : [];
+    },
+    exportTotalWidth(n) {
+      return n > 1 ? this.canvasWidth * n + (n - 1) : this.canvasWidth;
+    },
+    async exportSVG() {
+      this.exportMenuOpen = false;
+      const els = this.exportSVGEls();
+      if (!els.length) return;
+      const svg = await serializeCanvasSVG(els, this.canvasWidth, this.canvasHeight, {});
+      triggerDownload(new Blob([svg], { type: 'image/svg+xml' }), this.exportFilename('svg'));
+    },
+    async exportPNG() {
+      this.exportMenuOpen = false;
+      const els = this.exportSVGEls();
+      if (!els.length) return;
+      const svg = await serializeCanvasSVG(els, this.canvasWidth, this.canvasHeight, { embedFonts: true });
+      const blob = await rasterize(svg, this.exportTotalWidth(els.length), this.canvasHeight, 3);
+      triggerDownload(blob, this.exportFilename('png'));
+    },
 
     setNsmMetric(key) { this.nsmMetric = key; },
     setNsmState(state) { this.nsmState = state; },
@@ -1016,7 +1137,7 @@ createApp({
       if (this._centerCol) this._ro.observe(this._centerCol);
       if (this._canvasWrap) this._ro.observe(this._canvasWrap);
     }
-    this._onResize = () => { this.viewMenuOpen = false; this.hiddenMenuOpen = false; this.measure(); };
+    this._onResize = () => { this.viewMenuOpen = false; this.hiddenMenuOpen = false; this.exportMenuOpen = false; this.measure(); };
     window.addEventListener('resize', this._onResize);
 
     // Del / Backspace hides the selected node — the app's one keyboard
